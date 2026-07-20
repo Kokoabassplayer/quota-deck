@@ -417,6 +417,7 @@ async function registerServices(state, paths, { run }) {
     "  $settings.IdleSettings.StopOnIdleEnd = $false",
     "  $settings.RestartCount = 3",
     "  $settings.RestartInterval = 'PT1M'",
+    "  $settings.ExecutionTimeLimit = 'PT0S'",
     "  Set-ScheduledTask -TaskName $name -Settings $settings -ErrorAction Stop | Out-Null",
     "}",
   ].join("\n");
