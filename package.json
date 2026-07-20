@@ -1,0 +1,46 @@
+{
+  "name": "quota-deck",
+  "version": "0.1.0",
+  "description": "Private mobile quota dashboard powered by CodexBar and Tailscale",
+  "license": "MIT",
+  "author": "Kokoabassplayer",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Kokoabassplayer/quota-deck.git"
+  },
+  "homepage": "https://github.com/Kokoabassplayer/quota-deck#readme",
+  "bugs": "https://github.com/Kokoabassplayer/quota-deck/issues",
+  "type": "module",
+  "bin": {
+    "quota-deck": "cli/quota-deck.mjs"
+  },
+  "files": [
+    "cli/",
+    "public/",
+    "src/",
+    "server.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "scripts": {
+    "icons": "node scripts/generate-icons.mjs",
+    "start": "node server.mjs",
+    "setup": "node cli/quota-deck.mjs setup",
+    "doctor": "node cli/quota-deck.mjs doctor",
+    "uninstall": "node cli/quota-deck.mjs uninstall",
+    "test": "node --test test/*.test.mjs",
+    "test:watch": "node --test --watch test/*.test.mjs",
+    "package:check": "node scripts/check-package.mjs",
+    "prepack": "npm test"
+  },
+  "dependencies": {
+    "qrcode-terminal": "0.12.0"
+  }
+}

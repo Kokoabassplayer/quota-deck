@@ -1,0 +1,8 @@
+.DS_Store
+.env
+coverage/
+node_modules/
+npm-debug.log*
+*.log
+*.tgz
+.quota-deck-test/
