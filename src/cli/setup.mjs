@@ -115,6 +115,9 @@ export async function setupQuotaDeck(options, context = {}) {
   };
 
   try {
+    if (previousState?.platform === "win32") {
+      await stopPreviousWindowsProcesses(previousState, { run });
+    }
     await stageRuntime(runtimePath);
     await mkdir(paths.bin, { recursive: true });
     await mkdir(paths.logs, { recursive: true });
@@ -394,6 +397,22 @@ export async function unregisterServices(platform, paths, { run = runCommand } =
 
 export async function disableServeRoute(state, { run = runCommand } = {}) {
   return run(state.tailscaleExecutable, ["serve", `--https=${state.servePort ?? 443}`, "off"]);
+}
+
+async function stopPreviousWindowsProcesses(state, { run }) {
+  const shell = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
+  const runtime = ps(state.runtimePath);
+  const codexBar = ps(state.codexBarExecutable);
+  const script = [
+    `$runtime=${runtime}`,
+    `$codexBar=${codexBar}`,
+    "$processes = Get-CimInstance Win32_Process | Where-Object {",
+    "  $_.ExecutablePath -eq $codexBar -or",
+    "  ($_.ExecutablePath -eq 'C:\\Program Files\\nodejs\\node.exe' -and $_.CommandLine -like \"*$runtime*\")",
+    "}",
+    "$processes | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+  ].join("\n");
+  await run(shell, ["-NoProfile", "-NonInteractive", "-Command", script]);
 }
 
 async function waitForURL(url, timeoutMs, fetchImpl = globalThis.fetch) {
