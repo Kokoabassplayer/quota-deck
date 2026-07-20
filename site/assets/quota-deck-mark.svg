@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>Quota Deck mark</title>
+  <rect x="5" y="5" width="54" height="54" rx="10" fill="#0a0f0e" stroke="#e6efeb" stroke-width="4"/>
+  <path d="M16 20h30M16 30h21M16 40h27" fill="none" stroke="#4cc9b0" stroke-width="4" stroke-linecap="square"/>
+</svg>
