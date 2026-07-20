@@ -2,6 +2,8 @@
 
 Private, mobile-first AI quota monitoring powered by CodexBar and Tailscale.
 
+Product page: [kokoabassplayer.github.io/quota-deck](https://kokoabassplayer.github.io/quota-deck/)
+
 ## Install
 
 Install [Node.js 22 or newer](https://nodejs.org/), then run:

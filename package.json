@@ -8,7 +8,7 @@
     "type": "git",
     "url": "git+https://github.com/Kokoabassplayer/quota-deck.git"
   },
-  "homepage": "https://github.com/Kokoabassplayer/quota-deck#readme",
+  "homepage": "https://kokoabassplayer.github.io/quota-deck/",
   "bugs": "https://github.com/Kokoabassplayer/quota-deck/issues",
   "type": "module",
   "bin": {

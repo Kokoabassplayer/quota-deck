@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en" data-theme="auto">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0a0f0e">
+    <meta name="description" content="Quota Deck is a private, mobile-first AI quota monitor for CodexBar and Tailscale.">
+    <meta name="color-scheme" content="dark light">
+    <meta property="og:title" content="Quota Deck | Private AI quota monitoring">
+    <meta property="og:description" content="See provider limits on your phone without sending credentials to a hosted dashboard.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://kokoabassplayer.github.io/quota-deck/">
+    <meta property="og:image" content="https://kokoabassplayer.github.io/quota-deck/assets/quota-deck-hero.png">
+    <link rel="icon" href="assets/quota-deck-mark.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="styles.css">
+    <title>Quota Deck | Private AI quota monitoring</title>
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content" data-en="Skip to content" data-th="ข้ามไปยังเนื้อหา">Skip to content</a>
+
+    <header class="site-header">
+      <a class="brand" href="." aria-label="Quota Deck home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="brand-copy">
+          <strong>QUOTA DECK</strong>
+          <small>PRIVATE AI RUNWAY</small>
+        </span>
+      </a>
+      <nav class="site-nav" aria-label="Primary navigation">
+        <a href="#why" data-en="Why it exists" data-th="ทำไมต้องมี">Why it exists</a>
+        <a href="#install" data-en="Install" data-th="ติดตั้ง">Install</a>
+        <a href="#security" data-en="Security" data-th="ความปลอดภัย">Security</a>
+      </nav>
+      <div class="header-actions">
+        <button class="text-control" id="language-toggle" type="button" aria-label="Switch to Thai">ไทย</button>
+        <button class="text-control" id="theme-toggle" type="button" aria-label="Use light theme">Light</button>
+      </div>
+    </header>
+
+    <main id="main-content">
+      <section class="hero section-wrap" aria-labelledby="hero-title">
+        <div class="hero-copy reveal">
+          <p class="eyebrow" data-en="Private quota monitoring" data-th="ดูโควตาแบบเป็นส่วนตัว">Private quota monitoring</p>
+          <h1 id="hero-title" data-en="See AI limits before they surprise you." data-th="เห็นโควตา AI ก่อนมันจะสร้างปัญหา">See AI limits before they surprise you.</h1>
+          <p class="hero-lede" data-en="One command installs a private dashboard for CodexBar, Tailscale, and your phone." data-th="คำสั่งเดียวติดตั้งแดชบอร์ดส่วนตัวสำหรับ CodexBar, Tailscale และมือถือของคุณ">One command installs a private dashboard for CodexBar, Tailscale, and your phone.</p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#install" data-en="Install now" data-th="ติดตั้งเลย">Install now</a>
+            <a class="button button-secondary" href="https://github.com/Kokoabassplayer/quota-deck" rel="noreferrer" data-en="View source" data-th="ดูซอร์สโค้ด">View source</a>
+          </div>
+          <p class="hero-note" data-en="Open source / local-first / tailnet-only" data-th="โอเพนซอร์ส / ทำงานในเครื่อง / ใช้ได้ใน tailnet">Open source / local-first / tailnet-only</p>
+        </div>
+        <figure class="hero-visual reveal">
+          <img src="assets/quota-deck-hero.png" alt="A laptop and phone showing abstract quota bars in a private home lab" width="1672" height="941">
+          <figcaption data-en="A private view from computer to phone." data-th="มุมมองส่วนตัวจากคอมพิวเตอร์ถึงมือถือ">A private view from computer to phone.</figcaption>
+        </figure>
+      </section>
+
+      <section class="intro section-wrap" id="why" aria-labelledby="why-title">
+        <div class="section-lead reveal">
+          <p class="kicker" data-en="Built for the machine you already own" data-th="สร้างมาเพื่อคอมที่คุณมีอยู่แล้ว">Built for the machine you already own</p>
+          <h2 id="why-title" data-en="Your quota stays close to home." data-th="ข้อมูลโควตาอยู่ใกล้ตัวคุณ">Your quota stays close to home.</h2>
+          <p data-en="Quota Deck reads the providers on your computer and sends only a normalized view through your private tailnet." data-th="Quota Deck อ่านข้อมูลจากผู้ให้บริการบนคอมพิวเตอร์ แล้วส่งเฉพาะข้อมูลที่จำเป็นผ่าน tailnet ส่วนตัว">Quota Deck reads the providers on your computer and sends only a normalized view through your private tailnet.</p>
+        </div>
+        <div class="principles reveal" aria-label="Quota Deck principles">
+          <article class="principle-row">
+            <h3 data-en="Private by default" data-th="เป็นส่วนตัวตั้งแต่ต้น">Private by default</h3>
+            <p data-en="Credentials stay on the host. The browser receives quota, reset, and freshness data." data-th="ข้อมูลยืนยันตัวตนอยู่บนเครื่องหลัก เบราว์เซอร์ได้รับเฉพาะโควตา การรีเซ็ต และเวลาข้อมูลล่าสุด">Credentials stay on the host. The browser receives quota, reset, and freshness data.</p>
+          </article>
+          <article class="principle-row">
+            <h3 data-en="One command" data-th="คำสั่งเดียว">One command</h3>
+            <p data-en="The wizard detects your OS, asks before installing prerequisites, and prints a phone-ready URL." data-th="ตัวช่วยตรวจระบบ ถามก่อนติดตั้งสิ่งที่ขาด และแสดง URL สำหรับมือถือ">The wizard detects your OS, asks before installing prerequisites, and prints a phone-ready URL.</p>
+          </article>
+          <article class="principle-row">
+            <h3 data-en="Open about the boundary" data-th="เปิดเผยขอบเขตชัดเจน">Open about the boundary</h3>
+            <p data-en="No public router port. No Tailscale Funnel. No hosted copy of your provider credentials." data-th="ไม่เปิดพอร์ตบนเราเตอร์ ไม่ใช้ Tailscale Funnel และไม่ฝากข้อมูลยืนยันตัวตนไว้บนเซิร์ฟเวอร์อื่น">No public router port. No Tailscale Funnel. No hosted copy of your provider credentials.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="install-section section-wrap" id="install" aria-labelledby="install-title">
+        <div class="install-copy reveal">
+          <p class="kicker" data-en="Start with the command" data-th="เริ่มจากคำสั่งเดียว">Start with the command</p>
+          <h2 id="install-title" data-en="A clean path from terminal to phone." data-th="จากเทอร์มินัลถึงมือถืออย่างเป็นขั้นตอน">A clean path from terminal to phone.</h2>
+          <p data-en="Install Node 22+, run the wizard, then follow the provider and Tailscale login screens it opens." data-th="ติดตั้ง Node 22 ขึ้นไป เรียกใช้ตัวช่วย แล้วทำตามหน้าล็อกอินของผู้ให้บริการและ Tailscale">Install Node 22+, run the wizard, then follow the provider and Tailscale login screens it opens.</p>
+        </div>
+        <div class="command-panel reveal">
+          <div class="command-header">
+            <span data-en="Terminal" data-th="เทอร์มินัล">Terminal</span>
+            <span class="command-platform">macOS / Windows</span>
+          </div>
+          <div class="command-line">
+            <code>npx quota-deck@latest setup</code>
+            <button class="copy-button" id="copy-command" type="button" data-en="Copy" data-th="คัดลอก" aria-label="Copy setup command">Copy</button>
+          </div>
+          <p class="command-caption" data-en="No clone. No config file. No Docker." data-th="ไม่ต้อง clone ไม่ต้องแก้ไฟล์ config ไม่ต้องใช้ Docker">No clone. No config file. No Docker.</p>
+        </div>
+      </section>
+
+      <section class="support-band section-wrap" aria-labelledby="support-title">
+        <div class="support-heading reveal">
+          <h2 id="support-title" data-en="Works with the tools already in your runway." data-th="ทำงานร่วมกับเครื่องมือที่คุณใช้อยู่แล้ว">Works with the tools already in your runway.</h2>
+        </div>
+        <div class="support-list reveal">
+          <div class="support-item"><strong>CodexBar</strong><span data-en="Provider quota source" data-th="แหล่งข้อมูลโควตาผู้ให้บริการ">Provider quota source</span></div>
+          <div class="support-item"><strong>z.ai</strong><span data-en="Optional API quota source" data-th="แหล่งข้อมูลโควตา API แบบเลือกได้">Optional API quota source</span></div>
+          <div class="support-item"><strong>Tailscale</strong><span data-en="Private network path" data-th="เส้นทางเครือข่ายส่วนตัว">Private network path</span></div>
+        </div>
+      </section>
+
+      <section class="security-section section-wrap" id="security" aria-labelledby="security-title">
+        <div class="security-copy reveal">
+          <p class="kicker" data-en="A small, explicit boundary" data-th="ขอบเขตเล็กและชัดเจน">A small, explicit boundary</p>
+          <h2 id="security-title" data-en="The host keeps the secrets." data-th="เครื่องหลักเก็บข้อมูลลับไว้เอง">The host keeps the secrets.</h2>
+          <p data-en="Quota Deck is a local gateway with a private network route. It is not a cloud dashboard." data-th="Quota Deck เป็น gateway ในเครื่องที่เชื่อมผ่านเครือข่ายส่วนตัว ไม่ใช่แดชบอร์ดบนคลาวด์">Quota Deck is a local gateway with a private network route. It is not a cloud dashboard.</p>
+        </div>
+        <div class="security-path reveal">
+          <div class="path-row"><strong data-en="On your computer" data-th="บนคอมพิวเตอร์ของคุณ">On your computer</strong><span data-en="Provider credentials and CodexBar stay local." data-th="ข้อมูลยืนยันตัวตนและ CodexBar อยู่ในเครื่อง">Provider credentials and CodexBar stay local.</span></div>
+          <div class="path-row"><strong data-en="Through your tailnet" data-th="ผ่าน tailnet ของคุณ">Through your tailnet</strong><span data-en="Tailscale Serve exposes only the route you approve." data-th="Tailscale Serve เปิดเฉพาะเส้นทางที่คุณอนุมัติ">Tailscale Serve exposes only the route you approve.</span></div>
+          <div class="path-row"><strong data-en="On your phone" data-th="บนมือถือของคุณ">On your phone</strong><span data-en="The PWA shows normalized quota and reset information." data-th="PWA แสดงข้อมูลโควตาและการรีเซ็ตที่ผ่านการจัดรูปแบบแล้ว">The PWA shows normalized quota and reset information.</span></div>
+        </div>
+      </section>
+
+      <section class="release-note section-wrap reveal" aria-labelledby="release-title">
+        <div>
+          <h2 id="release-title" data-en="macOS is stable. Windows is ready to try." data-th="macOS เสถียรแล้ว Windows พร้อมให้ลองใช้">macOS is stable. Windows is ready to try.</h2>
+          <p data-en="The Windows path is validated on a homelab. Wider hardware coverage remains beta." data-th="เส้นทาง Windows ผ่านการทดสอบบน homelab แล้ว ส่วนฮาร์ดแวร์ทั่วไปยังอยู่ในช่วง beta">The Windows path is validated on a homelab. Wider hardware coverage remains beta.</p>
+        </div>
+        <a class="text-link" href="https://github.com/Kokoabassplayer/quota-deck/blob/main/README.md" rel="noreferrer" data-en="Read the support notes" data-th="อ่านรายละเอียดการรองรับ">Read the support notes</a>
+      </section>
+
+      <section class="final-cta section-wrap reveal" aria-labelledby="final-title">
+        <div>
+          <p class="kicker" data-en="Ready when you are" data-th="พร้อมเมื่อคุณพร้อม">Ready when you are</p>
+          <h2 id="final-title" data-en="Keep the limits visible." data-th="เห็นขีดจำกัดได้ตลอดเวลา">Keep the limits visible.</h2>
+          <p data-en="Install it, inspect it, and make it yours." data-th="ติดตั้ง ตรวจสอบ และปรับใช้ให้เหมาะกับคุณ">Install it, inspect it, and make it yours.</p>
+        </div>
+        <div class="final-actions">
+          <a class="button button-primary" href="#install" data-en="Install now" data-th="ติดตั้งเลย">Install now</a>
+          <a class="button button-secondary" href="https://github.com/sponsors/Kokoabassplayer" rel="noreferrer" data-en="Sponsor the project" data-th="สนับสนุนโปรเจกต์">Sponsor the project</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer section-wrap">
+      <p>QUOTA DECK <span data-en="Independent community software" data-th="ซอฟต์แวร์ชุมชนอิสระ">Independent community software</span></p>
+      <div class="footer-links">
+        <a href="https://github.com/Kokoabassplayer/quota-deck" rel="noreferrer">GitHub</a>
+        <a href="https://www.npmjs.com/package/quota-deck" rel="noreferrer">npm</a>
+        <a href="https://github.com/sponsors/Kokoabassplayer" rel="noreferrer">Sponsors</a>
+        <span>MIT</span>
+      </div>
+    </footer>
+
+    <script src="script.js" defer></script>
+  </body>
+</html>
