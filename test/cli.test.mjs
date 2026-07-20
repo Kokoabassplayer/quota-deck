@@ -272,6 +272,73 @@ test("installs, upgrades, and uninstalls atomically without touching unrelated s
   assert.equal(calls.some(({ command }) => command.includes("brew") || command.includes("winget")), false);
 });
 
+test("runs the Windows Scheduled Task lifecycle with native paths", {
+  skip: process.platform !== "win32",
+}, async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "Quota Deck Windows "));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const localAppData = path.join(home, "App Data", "Local");
+  const calls = [];
+  let routeOwned = false;
+  const runCommand = async (command, args) => {
+    calls.push({ command, args: [...args] });
+    if (args[0] === "status" && args[1] === "--json") {
+      return result(JSON.stringify({
+        BackendState: "Running",
+        Self: { DNSName: "windows-beta.example.ts.net." },
+      }));
+    }
+    if (args[0] === "serve" && args[1] === "status") {
+      return result(routeOwned
+        ? JSON.stringify({ Web: { Handlers: { "/": { Proxy: "http://127.0.0.1:8787" } } } })
+        : "{}");
+    }
+    if (args[0] === "serve" && args.includes("--bg")) routeOwned = true;
+    if (args[0] === "serve" && args.includes("off")) routeOwned = false;
+    if (args[0] === "serve" && args.includes("--help")) {
+      return result("--port --refresh-interval");
+    }
+    if (args[0] === "--version" || args[0] === "version") return result("0.33.2");
+    return result("");
+  };
+  const firstExecutable = async (candidates) => candidates.some((value) => String(value).includes("CodexBar"))
+    ? path.join(localAppData, "Programs", "CodexBar", "codexbar-cli.exe")
+    : candidates.some((value) => String(value).includes("Tailscale"))
+      ? "C:\\Program Files\\Tailscale\\tailscale.exe"
+      : "winget.exe";
+  const context = {
+    platform: "win32",
+    home,
+    env: { LOCALAPPDATA: localAppData, ProgramFiles: "C:\\Program Files" },
+    runCommand,
+    firstExecutable,
+    checkPort: async () => false,
+    waitForURL: async () => undefined,
+    copyText: async () => true,
+    io: { log() {} },
+    packageVersion: "0.1.0-windows-test",
+  };
+
+  const installed = await setupQuotaDeck(setupOptions(), context);
+  assert.equal(installed.status, "installed");
+  assert.equal(installed.state.platform, "win32");
+  assert.equal(installed.state.publicOrigin, "https://windows-beta.example.ts.net");
+  assert.equal(routeOwned, true);
+  const paths = installationPaths({ platform: "win32", home, env: context.env });
+  const gatewayScript = await readFile(path.join(paths.bin, "run-gateway.ps1"), "utf8");
+  assert.match(gatewayScript, /QUOTA_DECK_CODEXBAR_ORIGIN/u);
+  assert.match(gatewayScript, /App Data/u);
+  const taskCreates = calls.filter(({ command, args }) => command === "schtasks.exe" && args[0] === "/Create");
+  assert.equal(taskCreates.length, 2);
+  assert(taskCreates.every(({ args }) => args.includes("LIMITED") && args.includes("ONLOGON")));
+
+  const removed = await uninstallQuotaDeck({ ...setupOptions(), command: "uninstall" }, context);
+  assert.equal(removed.status, "uninstalled");
+  assert.equal(routeOwned, false);
+  await assert.rejects(() => access(paths.root));
+  assert.equal(calls.some(({ command }) => command.includes("winget")), false);
+});
+
 function result(stdout, code = 0) {
   return { code, stdout, stderr: "" };
 }
