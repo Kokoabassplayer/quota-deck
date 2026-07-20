@@ -333,8 +333,17 @@ async function writeMacServiceFiles(state, paths) {
 }
 
 async function writeWindowsServiceFiles(state, paths) {
-  const codexbar = `& ${ps(state.codexBarExecutable)} ${state.codexBarArgs.map(ps).join(" ")}\nexit $LASTEXITCODE\n`;
-  const gateway = `$env:QUOTA_DECK_PORT=${ps(String(state.gatewayPort))}\n$env:QUOTA_DECK_PUBLIC_ORIGIN=${ps(state.publicOrigin)}\n$env:QUOTA_DECK_CODEXBAR_ORIGIN=${ps(`http://127.0.0.1:${state.codexBarPort}`)}\n& ${ps(state.nodeExecutable)} ${ps(path.join(state.runtimePath, "server.mjs"))}\nexit $LASTEXITCODE\n`;
+  // Scheduled Tasks receive a minimal system PATH. Win-CodexBar's Codex
+  // provider shells out to the user's npm-installed `codex` command, so add
+  // both locations explicitly instead of relying on an interactive profile.
+  const npmBin = process.env.APPDATA ? path.win32.join(process.env.APPDATA, "npm") : null;
+  const nodeBin = path.win32.dirname(state.nodeExecutable);
+  const pathParts = [npmBin, nodeBin].filter(Boolean).map(ps);
+  const pathLine = pathParts.length > 0
+    ? `$env:Path = ${pathParts.join(" + ';' + ")} + ';' + $env:Path\n`
+    : "";
+  const codexbar = `${pathLine}& ${ps(state.codexBarExecutable)} ${state.codexBarArgs.map(ps).join(" ")}\nexit $LASTEXITCODE\n`;
+  const gateway = `${pathLine}$env:QUOTA_DECK_PORT=${ps(String(state.gatewayPort))}\n$env:QUOTA_DECK_PUBLIC_ORIGIN=${ps(state.publicOrigin)}\n$env:QUOTA_DECK_CODEXBAR_ORIGIN=${ps(`http://127.0.0.1:${state.codexBarPort}`)}\n& ${ps(state.nodeExecutable)} ${ps(path.join(state.runtimePath, "server.mjs"))}\nexit $LASTEXITCODE\n`;
   await writeFile(path.join(paths.bin, "run-codexbar.ps1"), codexbar);
   await writeFile(path.join(paths.bin, "run-gateway.ps1"), gateway);
 }
