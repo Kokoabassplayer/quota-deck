@@ -19,6 +19,7 @@ test("serves the private snapshot interface with no-store and security headers",
     codexBarClient: {
       getSnapshot: async () => snapshot,
     },
+    instanceID: "0123456789abcdef0123456789abcdef",
   });
   await listen(server);
   t.after(() => close(server));
@@ -32,6 +33,7 @@ test("serves the private snapshot interface with no-store and security headers",
   assert.equal(response.headers.get("content-type"), "application/json; charset=utf-8");
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.equal(response.headers.get("x-frame-options"), "DENY");
+  assert.equal(response.headers.get("x-quota-deck-instance"), "0123456789abcdef0123456789abcdef");
   assert.equal(response.headers.get("referrer-policy"), "no-referrer");
   assert.match(response.headers.get("content-security-policy"), /default-src 'self'/);
 });

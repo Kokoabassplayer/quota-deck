@@ -78,7 +78,7 @@ export async function setupQuotaDeck(options, context = {}) {
 
   const target = `http://127.0.0.1:${options.gatewayPort}`;
   const serveStatus = await run(executables.tailscale, ["serve", "status", "--json"]);
-  if (serveStatus.code !== 0) {
+  if (serveStatus.code !== 0 || typeof serveStatus.stdout !== "string" || serveStatus.stdout.trim() === "") {
     throw setupError(localized(
       context.locale,
       "Could not read Tailscale Serve status. Quota Deck will not change any Serve route.",
@@ -105,6 +105,7 @@ export async function setupQuotaDeck(options, context = {}) {
   const token = platform === "darwin" ? randomBytes(32).toString("hex") : null;
   const state = {
     schemaVersion: 1,
+    instanceID: randomBytes(16).toString("hex"),
     version,
     platform,
     runtimePath,
@@ -167,9 +168,19 @@ export async function setupQuotaDeck(options, context = {}) {
     }
 
     const checkURL = context.waitForURL ?? waitForURL;
-    await checkURL(`http://127.0.0.1:${options.codexBarPort}/health`, 45_000, context.fetchImpl);
-    await checkURL(`http://127.0.0.1:${options.gatewayPort}/`, 45_000, context.fetchImpl);
-    await checkURL(`http://127.0.0.1:${options.gatewayPort}/api/snapshot`, 90_000, context.fetchImpl);
+    await checkURL(`http://127.0.0.1:${options.codexBarPort}/health`, 45_000, context.fetchImpl, validateCodexBarHealth);
+    await checkURL(
+      `http://127.0.0.1:${options.gatewayPort}/`,
+      45_000,
+      context.fetchImpl,
+      (response) => validateGatewayInstance(response, state.instanceID),
+    );
+    await checkURL(
+      `http://127.0.0.1:${options.gatewayPort}/api/snapshot`,
+      90_000,
+      context.fetchImpl,
+      (response) => validateGatewaySnapshot(response, state.instanceID),
+    );
     await atomicWriteJSON(paths.state, state);
     await removeOldVersions(paths.versions, runtimePath);
   } catch (error) {
@@ -348,7 +359,8 @@ async function writeMacServiceFiles(state, paths) {
   const uid = currentUserID();
   const loader = `#!/bin/sh\nset -eu\nTOKEN_FILE=${sh(state.tokenFile)}\n[ -f "$TOKEN_FILE" ] && [ ! -L "$TOKEN_FILE" ] || exit 78\n[ "$(/usr/bin/stat -f '%u:%Lp' "$TOKEN_FILE")" = '${uid}:600' ] || exit 78\nIFS= read -r CODEXBAR_DASHBOARD_TOKEN < "$TOKEN_FILE"\nexport CODEXBAR_DASHBOARD_TOKEN\n`;
   const codexbar = `#!/bin/sh\nset -eu\numask 077\n. ${sh(path.join(paths.bin, "load-dashboard-token.sh"))}\nexec ${sh(state.codexBarExecutable)} ${state.codexBarArgs.map(sh).join(" ")}\n`;
-  const gateway = `#!/bin/sh\nset -eu\numask 077\n. ${sh(path.join(paths.bin, "load-dashboard-token.sh"))}\nexport QUOTA_DECK_PORT=${sh(String(state.gatewayPort))}\nexport QUOTA_DECK_PUBLIC_ORIGIN=${sh(state.publicOrigin)}\nexport QUOTA_DECK_CODEXBAR_ORIGIN=${sh(`http://127.0.0.1:${state.codexBarPort}`)}\nexec ${sh(state.nodeExecutable)} ${sh(path.join(state.runtimePath, "server.mjs"))}\n`;
+  const instanceLine = state.instanceID ? `export QUOTA_DECK_INSTANCE_ID=${sh(state.instanceID)}\n` : "";
+  const gateway = `#!/bin/sh\nset -eu\numask 077\n. ${sh(path.join(paths.bin, "load-dashboard-token.sh"))}\nexport QUOTA_DECK_PORT=${sh(String(state.gatewayPort))}\nexport QUOTA_DECK_PUBLIC_ORIGIN=${sh(state.publicOrigin)}\nexport QUOTA_DECK_CODEXBAR_ORIGIN=${sh(`http://127.0.0.1:${state.codexBarPort}`)}\n${instanceLine}exec ${sh(state.nodeExecutable)} ${sh(path.join(state.runtimePath, "server.mjs"))}\n`;
   await writeExecutable(path.join(paths.bin, "load-dashboard-token.sh"), loader);
   await writeExecutable(path.join(paths.bin, "run-codexbar.sh"), codexbar);
   await writeExecutable(path.join(paths.bin, "run-gateway.sh"), gateway);
@@ -404,7 +416,8 @@ async function writeWindowsServiceFiles(state, paths) {
         "",
       ].join("\n")
     : "";
-  const gateway = `${pathLine}${providerLine}${zaiProviderLines}$env:QUOTA_DECK_PORT=${ps(String(state.gatewayPort))}\n$env:QUOTA_DECK_PUBLIC_ORIGIN=${ps(state.publicOrigin)}\n$env:QUOTA_DECK_CODEXBAR_ORIGIN=${ps(`http://127.0.0.1:${state.codexBarPort}`)}\n& ${ps(state.nodeExecutable)} ${ps(path.join(state.runtimePath, "server.mjs"))}\nexit $LASTEXITCODE\n`;
+  const instanceLine = state.instanceID ? `$env:QUOTA_DECK_INSTANCE_ID=${ps(state.instanceID)}\n` : "";
+  const gateway = `${pathLine}${providerLine}${zaiProviderLines}$env:QUOTA_DECK_PORT=${ps(String(state.gatewayPort))}\n$env:QUOTA_DECK_PUBLIC_ORIGIN=${ps(state.publicOrigin)}\n$env:QUOTA_DECK_CODEXBAR_ORIGIN=${ps(`http://127.0.0.1:${state.codexBarPort}`)}\n${instanceLine}& ${ps(state.nodeExecutable)} ${ps(path.join(state.runtimePath, "server.mjs"))}\nexit $LASTEXITCODE\n`;
   await writeFile(path.join(paths.bin, "run-codexbar.ps1"), `${pathLine}${providerLine}${zaiTokenLines}& ${ps(state.codexBarExecutable)} ${state.codexBarArgs.map(ps).join(" ")}\nexit $LASTEXITCODE\n`);
   await writeFile(path.join(paths.bin, "run-gateway.ps1"), gateway);
 }
@@ -486,7 +499,7 @@ async function stopPreviousWindowsProcesses(state, { run }) {
   await run(shell, ["-NoProfile", "-NonInteractive", "-Command", script]);
 }
 
-async function waitForURL(url, timeoutMs, fetchImpl = globalThis.fetch) {
+async function waitForURL(url, timeoutMs, fetchImpl = globalThis.fetch, validate = null) {
   const deadline = Date.now() + timeoutMs;
   let lastStatus = null;
   while (Date.now() < deadline) {
@@ -496,14 +509,42 @@ async function waitForURL(url, timeoutMs, fetchImpl = globalThis.fetch) {
         signal: AbortSignal.timeout(5_000),
       });
       lastStatus = response.status;
-      await response.body?.cancel();
-      if (response.ok) return;
+      const valid = response.ok && (validate ? await validate(response) : true);
+      if (!response.bodyUsed) await response.body?.cancel();
+      if (valid) return;
     } catch {
       // The process may still be starting.
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw setupError(`Health check failed for ${new URL(url).pathname} (${lastStatus ?? "offline"})`, 69);
+}
+
+async function validateCodexBarHealth(response) {
+  try {
+    const payload = await response.json();
+    return payload?.status === "ok"
+      && typeof payload?.version === "string"
+      && payload.version.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function validateGatewayInstance(response, instanceID) {
+  return response.headers.get("x-quota-deck-instance") === instanceID;
+}
+
+async function validateGatewaySnapshot(response, instanceID) {
+  if (!validateGatewayInstance(response, instanceID)) return false;
+  try {
+    const payload = await response.json();
+    return payload?.schemaVersion === 1
+      && payload?.source && typeof payload.source === "object"
+      && Array.isArray(payload.providers);
+  } catch {
+    return false;
+  }
 }
 
 async function readState(file) {

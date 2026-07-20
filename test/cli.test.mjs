@@ -254,6 +254,44 @@ test("fails closed when Tailscale Serve status cannot be read", async (t) => {
   await assert.rejects(() => access(path.join(home, "Library", "Application Support", "QuotaDeck")));
 });
 
+test("fails closed when Tailscale Serve status is empty", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "quota-deck-empty-serve-status-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const runCommand = async (_command, args) => {
+    if (args[0] === "status" && args[1] === "--json") {
+      return result(JSON.stringify({
+        BackendState: "Running",
+        Self: { DNSName: "empty-status.example.ts.net." },
+      }));
+    }
+    if (args[0] === "serve" && args[1] === "status") return result("  \n");
+    if (args[0] === "serve" && args.includes("--help")) {
+      return result("--host --port --refresh-interval --request-timeout --log-level");
+    }
+    if (args[0] === "--version" || args[0] === "version") return result("test version");
+    return result("");
+  };
+  const firstExecutable = async (candidates) => candidates.some((value) => String(value).includes("Tailscale"))
+    ? "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    : candidates.some((value) => String(value).includes("CodexBar"))
+      ? "/Applications/CodexBar.app/Contents/Helpers/CodexBarCLI"
+      : "/opt/homebrew/bin/brew";
+
+  await assert.rejects(
+    setupQuotaDeck(setupOptions(), {
+      platform: "darwin",
+      home,
+      env: {},
+      runCommand,
+      firstExecutable,
+      checkPort: async () => false,
+      io: { log() {} },
+    }),
+    /Could not read Tailscale Serve status/u,
+  );
+  await assert.rejects(() => access(path.join(home, "Library", "Application Support", "QuotaDeck")));
+});
+
 test("installs, upgrades, and uninstalls atomically without touching unrelated software", async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), "quota-deck-home-"));
   t.after(() => rm(home, { recursive: true, force: true }));
@@ -295,6 +333,7 @@ test("installs, upgrades, and uninstalls atomically without touching unrelated s
     firstExecutable,
     checkPort: async () => false,
     fetchImpl: async () => new Response("{}", { headers: { "content-type": "application/json" } }),
+    waitForURL: async () => undefined,
     copyText: async () => true,
     io: { log() {} },
     packageVersion: "0.1.0-test",

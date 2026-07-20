@@ -49,6 +49,7 @@ const SECURITY_HEADERS = {
  *   publicDir?: string,
  *   allowedHosts?: string[],
  *   publicOrigin?: string | null,
+ *   instanceID?: string | null,
  * }} options
  */
 export function createQuotaDeckServer({
@@ -57,6 +58,7 @@ export function createQuotaDeckServer({
   publicDir = DEFAULT_PUBLIC_DIR,
   allowedHosts = ["127.0.0.1", "localhost"],
   publicOrigin = null,
+  instanceID = null,
 }) {
   if (!codexBarClient || typeof codexBarClient.getSnapshot !== "function") {
     throw new TypeError("codexBarClient.getSnapshot is required");
@@ -67,6 +69,7 @@ export function createQuotaDeckServer({
   if (publicOrigin !== null && publicOrigin !== undefined) {
     trustedOrigins.add(normalizeOrigin(publicOrigin));
   }
+  const trustedInstanceID = /^[a-f0-9]{32}$/u.test(String(instanceID ?? "")) ? String(instanceID) : null;
 
   const server = http.createServer(
     {
@@ -80,6 +83,7 @@ export function createQuotaDeckServer({
         publicDir,
         trustedHosts,
         trustedOrigins,
+        instanceID: trustedInstanceID,
       }).catch((error) => {
         logger.error?.("Quota Deck request failed", {
           name: error?.name ?? "Error",
@@ -110,6 +114,7 @@ export function createQuotaDeckServer({
 
 async function handleRequest(request, response, context) {
   applyHeaders(response, SECURITY_HEADERS);
+  if (context.instanceID) response.setHeader("X-Quota-Deck-Instance", context.instanceID);
 
   if (!isTrustedRequest(request, context.trustedHosts, context.trustedOrigins)) {
     response.setHeader("Cache-Control", "no-store");

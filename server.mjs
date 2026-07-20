@@ -12,6 +12,7 @@ const server = createQuotaDeckServer({
   codexBarClient,
   allowedHosts: config.allowedHosts,
   publicOrigin: config.publicOrigin,
+  instanceID: process.env.QUOTA_DECK_INSTANCE_ID,
 });
 const WARM_INTERVAL_MS = 90_000;
 let warmTimer = null;
