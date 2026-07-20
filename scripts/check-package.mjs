@@ -4,13 +4,17 @@ import path from "node:path";
 import process from "node:process";
 
 const root = process.cwd();
+const npmCLI = process.env.npm_execpath;
 const packageResult = spawnSync(
-  process.platform === "win32" ? "npm.cmd" : "npm",
-  ["pack", "--dry-run", "--json", "--ignore-scripts"],
+  npmCLI ? process.execPath : (process.platform === "win32" ? "npm.cmd" : "npm"),
+  npmCLI
+    ? [npmCLI, "pack", "--dry-run", "--json", "--ignore-scripts"]
+    : ["pack", "--dry-run", "--json", "--ignore-scripts"],
   { cwd: root, encoding: "utf8" },
 );
 if (packageResult.status !== 0) {
-  process.stderr.write(packageResult.stderr || packageResult.stdout);
+  if (packageResult.error) throw packageResult.error;
+  process.stderr.write(packageResult.stderr || packageResult.stdout || "npm pack failed\n");
   process.exit(packageResult.status ?? 1);
 }
 
