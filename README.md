@@ -13,7 +13,7 @@ npx quota-deck@latest setup
 The wizard checks your computer, asks before installing missing software, opens the login screens, installs a private background runtime, configures an unused Tailscale Serve HTTPS listener (falling back to `:8443`/`:10000` on Windows when `:443` already serves another homelab app), and shows a mobile URL with a locally generated QR code.
 
 - macOS: stable setup using CodexBar and LaunchAgents; it uses the authenticated local dashboard endpoint when available and a bounded legacy fallback otherwise.
-- Windows 10/11: beta setup using Win-CodexBar legacy `serve` endpoints and limited-user Scheduled Tasks.
+- Windows 10/11: supported setup path validated end-to-end on the Windows homelab, using Win-CodexBar legacy `serve` endpoints and limited-user Scheduled Tasks. Broader Windows hardware/build coverage remains beta.
 - English and Thai are detected automatically; the dashboard language can be switched at any time.
 
 No repository clone, configuration file, service command, hostname lookup, Docker, or administrator-level Quota Deck service is required for the Codex-only path. Authentication still needs your interaction because provider and Tailscale login cannot be automated safely.

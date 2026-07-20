@@ -7,7 +7,7 @@ Show which AI provider is usable now, how much quota remains, and when it resets
 ## Supported hosts
 
 - macOS is the stable target. Quota Deck prefers CodexBar's authenticated dashboard snapshot on loopback and keeps a bounded legacy fallback for older builds.
-- Windows 10/11 is beta. Win-CodexBar provides compatible legacy usage and cost endpoints on loopback.
+- Windows 10/11 is a supported setup path. The end-to-end runtime and mobile access path has been validated on the Windows homelab; broader Windows hardware/build coverage remains beta. Win-CodexBar provides compatible legacy usage and cost endpoints on loopback.
 - Node.js 22 or newer is the only prerequisite installed by the user before running `npx quota-deck@latest setup`.
 
 ## Installation contract
@@ -48,7 +48,7 @@ The gateway keeps the last successful in-memory snapshot. Requests can receive i
 - Healthy providers remain visible when another provider fails.
 - English and Thai UI use browser-local timezone formatting.
 - Package inspection and scans find no credentials or machine-specific metadata.
-- CI passes on macOS and Windows; Windows remains beta until real Windows 10/11 persistence and mobile smoke tests pass.
+- CI passes on macOS and Windows, and the Windows homelab deployment has passed its real-world runtime and mobile-access check. Broader Windows 10/11 hardware/build coverage remains beta until additional real-machine smoke coverage is added.
 
 ## Non-goals
 
