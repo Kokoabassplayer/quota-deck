@@ -16,6 +16,7 @@ const elements = {
   announcer: byID("sync-announcer"),
   board: byID("provider-board"),
   count: byID("provider-count"),
+  installButton: document.getElementById("install-button"),
   list: byID("provider-list"),
   languageButton: document.getElementById("language-button"),
   providerSwitcher: byID("provider-switcher"),
@@ -39,6 +40,10 @@ const appState = {
   syncing: false,
   view: null,
 };
+
+let deferredInstallPrompt = null;
+
+setupPWAInstall();
 
 elements.refreshButton.addEventListener("click", () => sync({ announce: true }));
 elements.languageButton?.addEventListener("click", () => {
@@ -605,6 +610,31 @@ function updateSyncControl(tone, label) {
 function registerServiceWorker() {
   if (!("serviceWorker" in navigator) || !window.isSecureContext) return;
   navigator.serviceWorker.register("/sw.js").catch(() => {});
+}
+
+function setupPWAInstall() {
+  if (!elements.installButton) return;
+  window.addEventListener("beforeinstallprompt", (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event;
+    elements.installButton.hidden = false;
+  });
+  window.addEventListener("appinstalled", () => {
+    deferredInstallPrompt = null;
+    elements.installButton.hidden = true;
+  });
+  elements.installButton.addEventListener("click", async () => {
+    if (!deferredInstallPrompt) return;
+    const promptEvent = deferredInstallPrompt;
+    deferredInstallPrompt = null;
+    elements.installButton.hidden = true;
+    try {
+      await promptEvent.prompt();
+      await promptEvent.userChoice;
+    } catch {
+      // The browser may cancel an install prompt; the dashboard remains usable.
+    }
+  });
 }
 
 function byID(id) {

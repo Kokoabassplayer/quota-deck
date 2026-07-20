@@ -174,20 +174,24 @@ function dashboardProviderState(payload, windows) {
 }
 
 function normalizeDashboardWindow(providerID, value) {
-  if (!isRecord(value) || !Number.isFinite(value.usedPercent)) return null;
+  if (!isRecord(value)) return null;
+  const usedPercent = finiteField(value, "usedPercent", "used_percent");
+  if (!Number.isFinite(usedPercent)) return null;
   const label = typeof value.label === "string" ? value.label.toUpperCase() : "QUOTA";
   const kind = dashboardWindowKind(providerID, value.kind, label);
-  const usedPercent = clampPercent(value.usedPercent);
+  const normalizedUsedPercent = clampPercent(usedPercent);
 
   return {
     kind,
     label,
-    usedPercent,
+    usedPercent: normalizedUsedPercent,
     remainingPercent: Number.isFinite(value.remainingPercent)
       ? clampPercent(value.remainingPercent)
-      : roundPercent(100 - usedPercent),
+      : roundPercent(100 - normalizedUsedPercent),
     windowMinutes: null,
-    resetsAt: typeof value.resetAt === "string" ? value.resetAt : null,
+    resetsAt: typeof value.resetAt === "string"
+      ? value.resetAt
+      : typeof value.reset_at === "string" ? value.reset_at : null,
     synthetic: false,
   };
 }
@@ -249,14 +253,21 @@ function normalizeProvider(payload, costPayloads, referenceTime) {
       normalizeWindow(usage[slot], classifyWindow(id, slot, usage[slot]), pace[slot]),
     )
     .filter(Boolean);
+  const extraWindows = Array.isArray(usage.extra_rate_windows)
+    ? usage.extra_rate_windows
+        .map((entry) => normalizeExtraWindow(id, entry))
+        .filter(Boolean)
+    : [];
 
   const provider = {
     id,
     label: PROVIDER_LABELS[id] ?? titleCase(id),
     source: typeof payload.source === "string" ? payload.source : "unknown",
     state: payload.error ? (windows.length > 0 ? "partial" : "error") : "ok",
-    updatedAt: typeof usage.updatedAt === "string" ? usage.updatedAt : null,
-    windows,
+    updatedAt: typeof usage.updatedAt === "string"
+      ? usage.updatedAt
+      : typeof usage.updated_at === "string" ? usage.updated_at : null,
+    windows: [...windows, ...extraWindows],
   };
 
   const error = normalizeError(payload.error);
@@ -271,22 +282,39 @@ function normalizeProvider(payload, costPayloads, referenceTime) {
 }
 
 function normalizeWindow(value, kind, paceValue) {
-  if (!isRecord(value) || !Number.isFinite(value.usedPercent)) return null;
+  if (!isRecord(value)) return null;
+  const usedPercent = finiteField(value, "usedPercent", "used_percent");
+  if (!Number.isFinite(usedPercent)) return null;
+  const windowMinutes = finiteField(value, "windowMinutes", "window_minutes");
+  const resetsAt = stringField(value, "resetsAt", "resets_at");
 
-  const usedPercent = clampPercent(value.usedPercent);
+  const normalizedUsedPercent = clampPercent(usedPercent);
   const window = {
     kind,
-    label: windowLabel(value.windowMinutes, kind),
-    usedPercent,
-    remainingPercent: roundPercent(100 - usedPercent),
-    windowMinutes: Number.isFinite(value.windowMinutes) ? value.windowMinutes : null,
-    resetsAt: typeof value.resetsAt === "string" ? value.resetsAt : null,
+    label: windowLabel(windowMinutes, kind),
+    usedPercent: normalizedUsedPercent,
+    remainingPercent: roundPercent(100 - normalizedUsedPercent),
+    windowMinutes: Number.isFinite(windowMinutes) ? windowMinutes : null,
+    resetsAt,
     synthetic: value.isSyntheticPlaceholder === true,
   };
 
   const pace = normalizePace(paceValue);
   if (pace) window.pace = pace;
 
+  return window;
+}
+
+function normalizeExtraWindow(providerID, entry) {
+  if (!isRecord(entry) || !isRecord(entry.window)) return null;
+  const value = entry.window;
+  const windowMinutes = finiteField(value, "windowMinutes", "window_minutes");
+  if (!Number.isFinite(windowMinutes)) return null;
+  const kind = classifyWindow(providerID, "tertiary", value);
+  const window = normalizeWindow(value, kind, null);
+  if (!window) return null;
+  const title = stringField(entry, "title", "name");
+  if (title) window.label = title.toUpperCase();
   return window;
 }
 
@@ -426,12 +454,15 @@ function safeErrorKind(value) {
 
 function classifyWindow(providerID, slot, value) {
   if (providerID === "zai") return ZAI_WINDOW_KINDS[slot];
-  if (isRecord(value) && Number.isFinite(value.windowMinutes)) {
-    if (value.windowMinutes <= 24 * 60) return "session";
-    if (value.windowMinutes >= 6 * 24 * 60 && value.windowMinutes <= 8 * 24 * 60) {
+  const windowMinutes = isRecord(value)
+    ? finiteField(value, "windowMinutes", "window_minutes")
+    : null;
+  if (Number.isFinite(windowMinutes)) {
+    if (windowMinutes <= 24 * 60) return "session";
+    if (windowMinutes >= 6 * 24 * 60 && windowMinutes <= 8 * 24 * 60) {
       return "weekly";
     }
-    if (value.windowMinutes >= 28 * 24 * 60) return "monthly";
+    if (windowMinutes >= 28 * 24 * 60) return "monthly";
   }
   return POSITIONAL_WINDOW_KINDS[slot];
 }
@@ -455,6 +486,18 @@ function roundPercent(value) {
 
 function finiteOrNull(value) {
   return Number.isFinite(value) ? value : null;
+}
+
+function finiteField(value, camelName, snakeName) {
+  if (!isRecord(value)) return null;
+  if (Number.isFinite(value[camelName])) return value[camelName];
+  return Number.isFinite(value[snakeName]) ? value[snakeName] : null;
+}
+
+function stringField(value, camelName, snakeName) {
+  if (!isRecord(value)) return null;
+  if (typeof value[camelName] === "string") return value[camelName];
+  return typeof value[snakeName] === "string" ? value[snakeName] : null;
 }
 
 function titleCase(value) {

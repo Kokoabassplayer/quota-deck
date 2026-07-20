@@ -8,6 +8,7 @@ import qrCode from "qrcode-terminal";
 import { collectDoctorReport, formatDoctorReport } from "./doctor.mjs";
 import {
   codexBarServeArgs,
+  chooseServePort,
   executableCandidates,
   inspectServeStatus,
   installationPaths,
@@ -46,7 +47,8 @@ export async function setupQuotaDeck(options, context = {}) {
 
   report = await ensurePrerequisites(report, options, { ...context, io, run, locate, platform, env });
   const previousState = await readState(paths.state);
-  if (report.ports.gateway.inUse && previousState?.gatewayPort !== options.gatewayPort) {
+  const ownsPreviousConfig = previousState?.platform === platform;
+  if (report.ports.gateway.inUse && (!ownsPreviousConfig || previousState.gatewayPort !== options.gatewayPort)) {
     throw setupError(
       localized(
         context.locale,
@@ -56,7 +58,7 @@ export async function setupQuotaDeck(options, context = {}) {
       73,
     );
   }
-  if (report.ports.codexBar.inUse && previousState?.codexBarPort !== options.codexBarPort) {
+  if (report.ports.codexBar.inUse && (!ownsPreviousConfig || previousState.codexBarPort !== options.codexBarPort)) {
     throw setupError(
       localized(
         context.locale,
@@ -76,20 +78,34 @@ export async function setupQuotaDeck(options, context = {}) {
 
   const target = `http://127.0.0.1:${options.gatewayPort}`;
   const serveStatus = await run(executables.tailscale, ["serve", "status", "--json"]);
-  const route = inspectServeStatus(serveStatus.code === 0 ? serveStatus.stdout : "", target);
-  if (route.state === "occupied") {
+  if (serveStatus.code !== 0 || typeof serveStatus.stdout !== "string" || serveStatus.stdout.trim() === "") {
     throw setupError(localized(
       context.locale,
-      "Tailscale Serve already has a route. Quota Deck will not overwrite it.",
-      "Tailscale Serve มีเส้นทางอยู่แล้ว Quota Deck จะไม่เขียนทับ",
+      "Could not read Tailscale Serve status. Quota Deck will not change any Serve route.",
+      "อ่านสถานะ Tailscale Serve ไม่สำเร็จ Quota Deck จะไม่เปลี่ยนเส้นทาง Serve ใด ๆ",
+    ), 69);
+  }
+  const serveStatusJSON = serveStatus.stdout;
+  const previousServePort = previousState?.servePort ?? 443;
+  const selectedServe = chooseServePort(serveStatusJSON, target, {
+    platform,
+    preferred: previousServePort,
+  });
+  if (selectedServe.state === "occupied" || selectedServe.port === null) {
+    throw setupError(localized(
+      context.locale,
+      "No unused Tailscale Serve HTTPS listener is available. Quota Deck will not overwrite an existing route.",
+      "ไม่มี HTTPS listener ของ Tailscale Serve ที่ว่าง Quota Deck จะไม่เขียนทับเส้นทางเดิม",
     ), 73);
   }
+  const servePort = selectedServe.port;
 
   const version = context.packageVersion ?? await packageVersion(PACKAGE_ROOT);
   const runtimePath = path.join(paths.versions, `${version}-${Date.now()}`);
   const token = platform === "darwin" ? randomBytes(32).toString("hex") : null;
   const state = {
     schemaVersion: 1,
+    instanceID: randomBytes(16).toString("hex"),
     version,
     platform,
     runtimePath,
@@ -97,15 +113,42 @@ export async function setupQuotaDeck(options, context = {}) {
     tailscaleExecutable: executables.tailscale,
     nodeExecutable: process.execPath,
     codexBarArgs: codexBarServeArgs(serveHelp.stdout, { port: options.codexBarPort, platform }),
+    codexBarProvider: platform === "win32" ? "codex" : null,
     codexBarPort: options.codexBarPort,
     gatewayPort: options.gatewayPort,
-    publicOrigin: `https://${report._tailscaleDNSName}`,
+    publicOrigin: `https://${report._tailscaleDNSName}${servePort === 443 ? "" : `:${servePort}`}`,
     routeTarget: target,
+    servePort,
     tokenFile: paths.token,
+    zaiTokenFile: paths.zaiToken,
     installedAt: new Date().toISOString(),
   };
 
   try {
+    if (previousState?.platform === platform) {
+      // Do not trust install.json alone to identify whoever owns a bound
+      // loopback port. Stop Quota Deck's known generation, remove its
+      // launch/task registration, and prove both ports are free before the
+      // new generation can receive the retained Serve route.
+      if (platform === "win32") await stopPreviousWindowsProcesses(previousState, { run });
+      await unregisterServices(platform, paths, { run });
+      report = await collectDoctorReport({
+        platform,
+        env,
+        codexBarPort: options.codexBarPort,
+        gatewayPort: options.gatewayPort,
+        runCommand: run,
+        firstExecutable: locate,
+        checkPort: context.checkPort,
+      });
+      if (report.ports.gateway.inUse || report.ports.codexBar.inUse) {
+        throw setupError(localized(
+          context.locale,
+          "Quota Deck could not reclaim its previous loopback ports. An unknown local service may be using them; no replacement was started.",
+          "Quota Deck ยึดพอร์ต loopback เดิมคืนไม่ได้ อาจมีบริการอื่นใช้งานอยู่ จึงไม่เริ่มบริการทดแทน",
+        ), 73);
+      }
+    }
     await stageRuntime(runtimePath);
     await mkdir(paths.bin, { recursive: true });
     await mkdir(paths.logs, { recursive: true });
@@ -116,24 +159,38 @@ export async function setupQuotaDeck(options, context = {}) {
     await writeServiceFiles(state, paths);
     await registerServices(state, paths, { run });
 
-    if (route.state === "empty") {
-      const configured = await run(executables.tailscale, ["serve", "--bg", "--yes", target]);
+    if (selectedServe.state === "empty") {
+      const servePortFlag = servePort === 443 ? [] : [`--https=${servePort}`];
+      const configured = await run(executables.tailscale, ["serve", "--bg", "--yes", ...servePortFlag, target]);
       if (configured.code !== 0) {
         throw setupError(localized(context.locale, "Tailscale Serve could not be configured", "ตั้งค่า Tailscale Serve ไม่สำเร็จ"), 69);
       }
     }
 
     const checkURL = context.waitForURL ?? waitForURL;
-    await checkURL(`http://127.0.0.1:${options.codexBarPort}/health`, 45_000, context.fetchImpl);
-    await checkURL(`http://127.0.0.1:${options.gatewayPort}/`, 45_000, context.fetchImpl);
-    await checkURL(`http://127.0.0.1:${options.gatewayPort}/api/snapshot`, 90_000, context.fetchImpl);
+    await checkURL(`http://127.0.0.1:${options.codexBarPort}/health`, 45_000, context.fetchImpl, validateCodexBarHealth);
+    await checkURL(
+      `http://127.0.0.1:${options.gatewayPort}/`,
+      45_000,
+      context.fetchImpl,
+      (response) => validateGatewayInstance(response, state.instanceID),
+    );
+    await checkURL(
+      `http://127.0.0.1:${options.gatewayPort}/api/snapshot`,
+      90_000,
+      context.fetchImpl,
+      (response) => validateGatewaySnapshot(response, state.instanceID),
+    );
     await atomicWriteJSON(paths.state, state);
     await removeOldVersions(paths.versions, runtimePath);
   } catch (error) {
+    if (platform === "win32") {
+      await stopPreviousWindowsProcesses(state, { run }).catch(() => undefined);
+    }
     await unregisterServices(platform, paths, { run }).catch(() => undefined);
-    if (route.state === "empty") {
+    if (selectedServe.state === "empty") {
       const current = await run(executables.tailscale, ["serve", "status", "--json"]).catch(() => null);
-      if (current?.code === 0 && inspectServeStatus(current.stdout, target).state === "owned") {
+      if (current?.code === 0 && inspectServeStatus(current.stdout, target, servePort).state === "owned") {
         await disableServeRoute(state, { run }).catch(() => undefined);
       }
     }
@@ -302,7 +359,8 @@ async function writeMacServiceFiles(state, paths) {
   const uid = currentUserID();
   const loader = `#!/bin/sh\nset -eu\nTOKEN_FILE=${sh(state.tokenFile)}\n[ -f "$TOKEN_FILE" ] && [ ! -L "$TOKEN_FILE" ] || exit 78\n[ "$(/usr/bin/stat -f '%u:%Lp' "$TOKEN_FILE")" = '${uid}:600' ] || exit 78\nIFS= read -r CODEXBAR_DASHBOARD_TOKEN < "$TOKEN_FILE"\nexport CODEXBAR_DASHBOARD_TOKEN\n`;
   const codexbar = `#!/bin/sh\nset -eu\numask 077\n. ${sh(path.join(paths.bin, "load-dashboard-token.sh"))}\nexec ${sh(state.codexBarExecutable)} ${state.codexBarArgs.map(sh).join(" ")}\n`;
-  const gateway = `#!/bin/sh\nset -eu\numask 077\n. ${sh(path.join(paths.bin, "load-dashboard-token.sh"))}\nexport QUOTA_DECK_PORT=${sh(String(state.gatewayPort))}\nexport QUOTA_DECK_PUBLIC_ORIGIN=${sh(state.publicOrigin)}\nexport QUOTA_DECK_CODEXBAR_ORIGIN=${sh(`http://127.0.0.1:${state.codexBarPort}`)}\nexec ${sh(state.nodeExecutable)} ${sh(path.join(state.runtimePath, "server.mjs"))}\n`;
+  const instanceLine = state.instanceID ? `export QUOTA_DECK_INSTANCE_ID=${sh(state.instanceID)}\n` : "";
+  const gateway = `#!/bin/sh\nset -eu\numask 077\n. ${sh(path.join(paths.bin, "load-dashboard-token.sh"))}\nexport QUOTA_DECK_PORT=${sh(String(state.gatewayPort))}\nexport QUOTA_DECK_PUBLIC_ORIGIN=${sh(state.publicOrigin)}\nexport QUOTA_DECK_CODEXBAR_ORIGIN=${sh(`http://127.0.0.1:${state.codexBarPort}`)}\n${instanceLine}exec ${sh(state.nodeExecutable)} ${sh(path.join(state.runtimePath, "server.mjs"))}\n`;
   await writeExecutable(path.join(paths.bin, "load-dashboard-token.sh"), loader);
   await writeExecutable(path.join(paths.bin, "run-codexbar.sh"), codexbar);
   await writeExecutable(path.join(paths.bin, "run-gateway.sh"), gateway);
@@ -324,9 +382,43 @@ async function writeMacServiceFiles(state, paths) {
 }
 
 async function writeWindowsServiceFiles(state, paths) {
-  const codexbar = `& ${ps(state.codexBarExecutable)} ${state.codexBarArgs.map(ps).join(" ")}\nexit $LASTEXITCODE\n`;
-  const gateway = `$env:QUOTA_DECK_PORT=${ps(String(state.gatewayPort))}\n$env:QUOTA_DECK_PUBLIC_ORIGIN=${ps(state.publicOrigin)}\n$env:QUOTA_DECK_CODEXBAR_ORIGIN=${ps(`http://127.0.0.1:${state.codexBarPort}`)}\n& ${ps(state.nodeExecutable)} ${ps(path.join(state.runtimePath, "server.mjs"))}\nexit $LASTEXITCODE\n`;
-  await writeFile(path.join(paths.bin, "run-codexbar.ps1"), codexbar);
+  // Scheduled Tasks receive a minimal system PATH. Win-CodexBar's Codex
+  // provider shells out to the user's npm-installed `codex` command, so add
+  // both locations explicitly instead of relying on an interactive profile.
+  const npmBin = process.env.APPDATA ? path.win32.join(process.env.APPDATA, "npm") : null;
+  const nodeBin = path.win32.dirname(state.nodeExecutable);
+  const pathParts = [npmBin, nodeBin].filter(Boolean).map(ps);
+  const pathLine = pathParts.length > 0
+    ? `$env:Path = ${pathParts.join(" + ';' + ")} + ';' + $env:Path\n`
+    : "";
+  const providerLine = state.codexBarProvider
+    ? `$env:QUOTA_DECK_CODEXBAR_PROVIDER=${ps(state.codexBarProvider)}\n`
+    : "";
+  const zaiTokenLines = state.zaiTokenFile
+    ? [
+        `$zaiTokenFile=${ps(state.zaiTokenFile)}`,
+        "if (Test-Path -LiteralPath $zaiTokenFile) {",
+        "  $zaiToken = (Get-Content -Raw -LiteralPath $zaiTokenFile).Trim()",
+        "  if ($zaiToken.Length -gt 0) {",
+        "    $env:Z_AI_API_KEY=$zaiToken",
+        "    $env:QUOTA_DECK_CODEXBAR_PROVIDER='codex,zai'",
+        "  }",
+        "}",
+        "",
+      ].join("\n")
+    : "";
+  const zaiProviderLines = state.zaiTokenFile
+    ? [
+        `$zaiTokenFile=${ps(state.zaiTokenFile)}`,
+        "if (Test-Path -LiteralPath $zaiTokenFile) {",
+        "  $env:QUOTA_DECK_CODEXBAR_PROVIDER='codex,zai'",
+        "}",
+        "",
+      ].join("\n")
+    : "";
+  const instanceLine = state.instanceID ? `$env:QUOTA_DECK_INSTANCE_ID=${ps(state.instanceID)}\n` : "";
+  const gateway = `${pathLine}${providerLine}${zaiProviderLines}$env:QUOTA_DECK_PORT=${ps(String(state.gatewayPort))}\n$env:QUOTA_DECK_PUBLIC_ORIGIN=${ps(state.publicOrigin)}\n$env:QUOTA_DECK_CODEXBAR_ORIGIN=${ps(`http://127.0.0.1:${state.codexBarPort}`)}\n${instanceLine}& ${ps(state.nodeExecutable)} ${ps(path.join(state.runtimePath, "server.mjs"))}\nexit $LASTEXITCODE\n`;
+  await writeFile(path.join(paths.bin, "run-codexbar.ps1"), `${pathLine}${providerLine}${zaiTokenLines}& ${ps(state.codexBarExecutable)} ${state.codexBarArgs.map(ps).join(" ")}\nexit $LASTEXITCODE\n`);
   await writeFile(path.join(paths.bin, "run-gateway.ps1"), gateway);
 }
 
@@ -345,14 +437,37 @@ async function registerServices(state, paths, { run }) {
   const shell = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
   const scripts = [path.join(paths.bin, "run-codexbar.ps1"), path.join(paths.bin, "run-gateway.ps1")];
   for (let index = 0; index < WINDOWS_TASKS.length; index += 1) {
+    // Stop an older generation before replacing its task definition. Without
+    // this, `schtasks /Run` leaves the old listener alive and an upgrade can
+    // appear healthy while still serving stale provider data.
+    await run("schtasks.exe", ["/End", "/TN", WINDOWS_TASKS[index]]);
     const taskCommand = `"${shell}" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "${scripts[index]}"`;
     const created = await run("schtasks.exe", [
       "/Create", "/F", "/SC", "ONLOGON", "/RL", "LIMITED",
       "/TN", WINDOWS_TASKS[index], "/TR", taskCommand,
     ]);
     if (created.code !== 0) throw setupError(`Could not register ${WINDOWS_TASKS[index]}`, 69);
-    await run("schtasks.exe", ["/Run", "/TN", WINDOWS_TASKS[index]]);
   }
+  const reliabilityScript = [
+    `$names = @(${WINDOWS_TASKS.map(ps).join(", ")})`,
+    "foreach ($name in $names) {",
+    "  $task = Get-ScheduledTask -TaskName $name -ErrorAction Stop",
+    "  $settings = $task.Settings",
+    "  $settings.DisallowStartIfOnBatteries = $false",
+    "  $settings.StopIfGoingOnBatteries = $false",
+    "  $settings.StartWhenAvailable = $true",
+    "  $settings.IdleSettings.StopOnIdleEnd = $false",
+    "  $settings.RestartCount = 3",
+    "  $settings.RestartInterval = 'PT1M'",
+    "  $settings.ExecutionTimeLimit = 'PT0S'",
+    "  Set-ScheduledTask -TaskName $name -Settings $settings -ErrorAction Stop | Out-Null",
+    "}",
+  ].join("\n");
+  const shellSettings = await run(shell, [
+    "-NoProfile", "-NonInteractive", "-Command", reliabilityScript,
+  ]);
+  if (shellSettings.code !== 0) throw setupError("Could not apply Windows task reliability settings", 69);
+  for (const task of WINDOWS_TASKS) await run("schtasks.exe", ["/Run", "/TN", task]);
 }
 
 export async function unregisterServices(platform, paths, { run = runCommand } = {}) {
@@ -367,10 +482,24 @@ export async function unregisterServices(platform, paths, { run = runCommand } =
 }
 
 export async function disableServeRoute(state, { run = runCommand } = {}) {
-  return run(state.tailscaleExecutable, ["serve", "--https=443", "off"]);
+  return run(state.tailscaleExecutable, ["serve", `--https=${state.servePort ?? 443}`, "off"]);
 }
 
-async function waitForURL(url, timeoutMs, fetchImpl = globalThis.fetch) {
+async function stopPreviousWindowsProcesses(state, { run }) {
+  const shell = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
+  const codexBar = ps(state.codexBarExecutable);
+  const script = [
+    `$codexBar=${codexBar}`,
+    "$processes = Get-CimInstance Win32_Process | Where-Object {",
+    "  $_.ExecutablePath -eq $codexBar -or",
+    "  ($_.ExecutablePath -eq 'C:\\Program Files\\nodejs\\node.exe' -and $_.CommandLine -like '*\\QuotaDeck\\versions\\*\\server.mjs*')",
+    "}",
+    "$processes | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+  ].join("\n");
+  await run(shell, ["-NoProfile", "-NonInteractive", "-Command", script]);
+}
+
+async function waitForURL(url, timeoutMs, fetchImpl = globalThis.fetch, validate = null) {
   const deadline = Date.now() + timeoutMs;
   let lastStatus = null;
   while (Date.now() < deadline) {
@@ -380,14 +509,42 @@ async function waitForURL(url, timeoutMs, fetchImpl = globalThis.fetch) {
         signal: AbortSignal.timeout(5_000),
       });
       lastStatus = response.status;
-      await response.body?.cancel();
-      if (response.ok) return;
+      const valid = response.ok && (validate ? await validate(response) : true);
+      if (!response.bodyUsed) await response.body?.cancel();
+      if (valid) return;
     } catch {
       // The process may still be starting.
     }
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
   throw setupError(`Health check failed for ${new URL(url).pathname} (${lastStatus ?? "offline"})`, 69);
+}
+
+async function validateCodexBarHealth(response) {
+  try {
+    const payload = await response.json();
+    return payload?.status === "ok"
+      && typeof payload?.version === "string"
+      && payload.version.trim().length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function validateGatewayInstance(response, instanceID) {
+  return response.headers.get("x-quota-deck-instance") === instanceID;
+}
+
+async function validateGatewaySnapshot(response, instanceID) {
+  if (!validateGatewayInstance(response, instanceID)) return false;
+  try {
+    const payload = await response.json();
+    return payload?.schemaVersion === 1
+      && payload?.source && typeof payload.source === "object"
+      && Array.isArray(payload.providers);
+  } catch {
+    return false;
+  }
 }
 
 async function readState(file) {

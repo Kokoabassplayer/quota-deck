@@ -28,7 +28,10 @@ export async function uninstallQuotaDeck(options, context = {}) {
   const run = context.runCommand ?? runCommand;
   await unregisterServices(platform, paths, { run });
   const serve = await run(state.tailscaleExecutable, ["serve", "status", "--json"]);
-  if (serve.code === 0 && inspectServeStatus(serve.stdout, state.routeTarget).state === "owned") {
+  if (
+    serve.code === 0
+    && inspectServeStatus(serve.stdout, state.routeTarget, state.servePort ?? 443).state === "owned"
+  ) {
     await disableServeRoute(state, { run });
   }
   if (platform === "darwin") {

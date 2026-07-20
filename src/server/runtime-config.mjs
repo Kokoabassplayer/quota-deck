@@ -51,7 +51,6 @@ function parsePublicOrigin(value) {
     url.protocol !== "https:" ||
     url.username ||
     url.password ||
-    url.port ||
     url.pathname !== "/" ||
     url.search ||
     url.hash ||

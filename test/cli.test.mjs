@@ -9,6 +9,7 @@ import { collectDoctorReport } from "../src/cli/doctor.mjs";
 import { runCLI } from "../src/cli/index.mjs";
 import {
   codexBarServeArgs,
+  chooseServePort,
   inspectServeStatus,
   installationPaths,
   parseTailscaleStatus,
@@ -87,6 +88,29 @@ test("extracts a privacy-safe Tailscale identity and protects existing Serve rou
       },
     }), "http://127.0.0.1:8787"),
     { state: "occupied" },
+  );
+  const existingRoute = JSON.stringify({
+    TCP: { "443": { HTTPS: true } },
+    Web: {
+      "friend-machine.example.ts.net:443": { Handlers: { "/": { Proxy: "http://127.0.0.1:3000" } } },
+    },
+  });
+  assert.deepEqual(inspectServeStatus(existingRoute, "http://127.0.0.1:8787", 443), { state: "occupied" });
+  assert.deepEqual(inspectServeStatus(existingRoute, "http://127.0.0.1:8787", 8443), { state: "empty" });
+  assert.deepEqual(
+    chooseServePort(existingRoute, "http://127.0.0.1:8787", { platform: "win32" }),
+    { port: 8443, state: "empty" },
+  );
+  const ownedAlternate = JSON.stringify({
+    TCP: { "443": { HTTPS: true }, "8443": { HTTPS: true } },
+    Web: {
+      "friend-machine.example.ts.net:443": { Handlers: { "/": { Proxy: "http://127.0.0.1:3000" } } },
+      "friend-machine.example.ts.net:8443": { Handlers: { "/": { Proxy: "http://127.0.0.1:8787" } } },
+    },
+  });
+  assert.deepEqual(
+    chooseServePort(ownedAlternate, "http://127.0.0.1:8787", { platform: "win32" }),
+    { port: 8443, state: "owned" },
   );
 });
 
@@ -192,6 +216,82 @@ test("failed fresh setup removes its runtime, services, logs, token, and Serve r
   assert.equal(routeOwned, false);
 });
 
+test("fails closed when Tailscale Serve status cannot be read", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "quota-deck-serve-status-error-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const runCommand = async (_command, args) => {
+    if (args[0] === "status" && args[1] === "--json") {
+      return result(JSON.stringify({
+        BackendState: "Running",
+        Self: { DNSName: "status-error.example.ts.net." },
+      }));
+    }
+    if (args[0] === "serve" && args[1] === "status") return result("", 1);
+    if (args[0] === "serve" && args.includes("--help")) {
+      return result("--host --port --refresh-interval --request-timeout --log-level");
+    }
+    if (args[0] === "--version" || args[0] === "version") return result("test version");
+    return result("");
+  };
+  const firstExecutable = async (candidates) => candidates.some((value) => String(value).includes("Tailscale"))
+    ? "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    : candidates.some((value) => String(value).includes("CodexBar"))
+      ? "/Applications/CodexBar.app/Contents/Helpers/CodexBarCLI"
+      : "/opt/homebrew/bin/brew";
+
+  await assert.rejects(
+    setupQuotaDeck(setupOptions(), {
+      platform: "darwin",
+      home,
+      env: {},
+      runCommand,
+      firstExecutable,
+      checkPort: async () => false,
+      io: { log() {} },
+    }),
+    /Could not read Tailscale Serve status/u,
+  );
+  await assert.rejects(() => access(path.join(home, "Library", "Application Support", "QuotaDeck")));
+});
+
+test("fails closed when Tailscale Serve status is empty", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "quota-deck-empty-serve-status-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const runCommand = async (_command, args) => {
+    if (args[0] === "status" && args[1] === "--json") {
+      return result(JSON.stringify({
+        BackendState: "Running",
+        Self: { DNSName: "empty-status.example.ts.net." },
+      }));
+    }
+    if (args[0] === "serve" && args[1] === "status") return result("  \n");
+    if (args[0] === "serve" && args.includes("--help")) {
+      return result("--host --port --refresh-interval --request-timeout --log-level");
+    }
+    if (args[0] === "--version" || args[0] === "version") return result("test version");
+    return result("");
+  };
+  const firstExecutable = async (candidates) => candidates.some((value) => String(value).includes("Tailscale"))
+    ? "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    : candidates.some((value) => String(value).includes("CodexBar"))
+      ? "/Applications/CodexBar.app/Contents/Helpers/CodexBarCLI"
+      : "/opt/homebrew/bin/brew";
+
+  await assert.rejects(
+    setupQuotaDeck(setupOptions(), {
+      platform: "darwin",
+      home,
+      env: {},
+      runCommand,
+      firstExecutable,
+      checkPort: async () => false,
+      io: { log() {} },
+    }),
+    /Could not read Tailscale Serve status/u,
+  );
+  await assert.rejects(() => access(path.join(home, "Library", "Application Support", "QuotaDeck")));
+});
+
 test("installs, upgrades, and uninstalls atomically without touching unrelated software", async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), "quota-deck-home-"));
   t.after(() => rm(home, { recursive: true, force: true }));
@@ -233,6 +333,7 @@ test("installs, upgrades, and uninstalls atomically without touching unrelated s
     firstExecutable,
     checkPort: async () => false,
     fetchImpl: async () => new Response("{}", { headers: { "content-type": "application/json" } }),
+    waitForURL: async () => undefined,
     copyText: async () => true,
     io: { log() {} },
     packageVersion: "0.1.0-test",
@@ -259,6 +360,15 @@ test("installs, upgrades, and uninstalls atomically without touching unrelated s
   assert.equal(restored.runtimePath, first.state.runtimePath);
   await access(first.state.runtimePath);
   assert.equal(routeOwned, true);
+
+  await assert.rejects(
+    setupQuotaDeck(options, {
+      ...context,
+      checkPort: async () => true,
+    }),
+    /could not reclaim its previous loopback ports/u,
+  );
+  await access(first.state.runtimePath);
 
   const second = await setupQuotaDeck(options, context);
   assert.equal(second.status, "installed");
@@ -326,7 +436,12 @@ test("runs the Windows Scheduled Task lifecycle with native paths", {
   assert.equal(routeOwned, true);
   const paths = installationPaths({ platform: "win32", home, env: context.env });
   const gatewayScript = await readFile(path.join(paths.bin, "run-gateway.ps1"), "utf8");
+  const codexbarScript = await readFile(path.join(paths.bin, "run-codexbar.ps1"), "utf8");
   assert.match(gatewayScript, /QUOTA_DECK_CODEXBAR_ORIGIN/u);
+  assert.match(gatewayScript, /zai-api-key/u);
+  assert.match(gatewayScript, /codex,zai/u);
+  assert.match(codexbarScript, /Z_AI_API_KEY/u);
+  assert.match(codexbarScript, /zai-api-key/u);
   assert.match(gatewayScript, /App Data/u);
   const taskCreates = calls.filter(({ command, args }) => command === "schtasks.exe" && args[0] === "/Create");
   assert.equal(taskCreates.length, 2);

@@ -13,6 +13,8 @@ const EXACT_ENGLISH = new Map([
   ["รอการเชื่อมต่อ", "Waiting for connection"],
   ["ข้อมูลส่วนตัวไม่ถูกเก็บบนมือถือ", "Personal data is not stored on this phone"],
   ["ข้ามไปดูโควตา", "Skip to quotas"],
+  ["ติดตั้ง", "Install"],
+  ["ติดตั้ง Quota Deck", "Install Quota Deck"],
   ["ภาพรวม", "Overview"],
   ["ภาพรวมผู้ให้บริการทั้งหมด", "Overview of all providers"],
   ["พร้อม", "Ready"],

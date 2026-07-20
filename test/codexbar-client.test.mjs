@@ -7,6 +7,7 @@ import {
   dashboardV1Snapshot,
   detailedCodexCost,
   detailedCodexUsage,
+  mixedProviderUsage,
 } from "./fixtures/codexbar-payloads.mjs";
 
 test("uses the authenticated dashboard snapshot when CodexBar supports it", async () => {
@@ -140,6 +141,77 @@ test("falls back to legacy usage when the dashboard endpoint is unavailable", as
   assert.equal(snapshot.providers[0].windows[0].remainingPercent, 36);
   assert.equal(snapshot.providers[0].cost, undefined);
   assert.equal(missingDashboard.bodyUsed, true);
+});
+
+test("uses an explicit legacy provider selector for Windows CodexBar", async () => {
+  const calls = [];
+  const client = createCodexBarClient({
+    provider: "codex",
+    fetchImpl: async (url) => {
+      calls.push(String(url));
+      return Response.json(currentUsage);
+    },
+  });
+
+  await client.refreshSnapshot();
+
+  assert.equal(calls[0], "http://127.0.0.1:8080/usage?provider=codex");
+  client.close();
+});
+
+test("queries a bounded legacy provider list without hiding healthy providers", async () => {
+  const calls = [];
+  const client = createCodexBarClient({
+    provider: "codex,zai",
+    fetchImpl: async (url) => {
+      const parsed = new URL(url);
+      calls.push(`${parsed.pathname}${parsed.search}`);
+      return Response.json(parsed.searchParams.get("provider") === "zai"
+        ? [mixedProviderUsage[1]]
+        : currentUsage);
+    },
+  });
+
+  const snapshot = await client.refreshSnapshot();
+
+  assert.deepEqual(calls.sort(), [
+    "/usage?provider=codex",
+    "/usage?provider=zai",
+  ]);
+  assert.deepEqual(snapshot.providers.map(({ id }) => id), ["codex", "zai"]);
+  assert.equal(snapshot.providers[1].windows[0].remainingPercent, 45);
+  client.close();
+});
+
+test("keeps a healthy explicit provider when its sibling request fails", async () => {
+  const client = createCodexBarClient({
+    provider: "codex,zai",
+    fetchImpl: async (url) => {
+      const parsed = new URL(url);
+      if (parsed.searchParams.get("provider") === "zai") {
+        throw new TypeError("connection reset");
+      }
+      return Response.json(currentUsage);
+    },
+  });
+
+  const snapshot = await client.refreshSnapshot();
+
+  assert.equal(snapshot.providers.find(({ id }) => id === "codex").state, "ok");
+  assert.equal(snapshot.providers.find(({ id }) => id === "zai").state, "error");
+  assert.equal(snapshot.providers.find(({ id }) => id === "zai").error.kind, "unavailable");
+  client.close();
+});
+
+test("rejects an unsafe legacy provider selector", () => {
+  assert.throws(
+    () => createCodexBarClient({ provider: "codex&provider=all" }),
+    /provider selector is invalid/u,
+  );
+  assert.throws(
+    () => createCodexBarClient({ provider: "codex,zai,unsafe provider" }),
+    /provider selector is invalid/u,
+  );
 });
 
 test("uses a configurable strict loopback origin supplied by runtime configuration", async () => {

@@ -6,8 +6,12 @@
     <meta name="theme-color" content="#091210">
     <meta name="description" content="ดูโควตา CodexBar บนมือถือผ่านเครือข่ายส่วนตัว">
     <meta name="color-scheme" content="dark">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" href="/icons/quota-deck.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <link rel="stylesheet" href="/styles.css">
     <title>Quota Deck</title>
   </head>
@@ -25,14 +29,15 @@
           </span>
         </div>
         <div class="masthead-actions">
-        <button class="language-button" id="language-button" type="button" aria-label="Switch language">EN</button>
-        <button class="sync-chip" id="refresh-button" type="button" data-tone="loading" aria-busy="true" disabled>
-          <span class="signal-dot" aria-hidden="true"></span>
-          <span class="sync-copy">
-            <span id="sync-label" data-i18n="กำลังเชื่อมต่อ">กำลังเชื่อมต่อ</span>
-            <span class="sync-action" id="refresh-label" data-i18n="รอสักครู่">รอสักครู่</span>
-          </span>
-        </button>
+          <button class="install-button" id="install-button" type="button" aria-label="ติดตั้ง Quota Deck" data-i18n="ติดตั้ง" data-i18n-aria="ติดตั้ง Quota Deck" hidden>ติดตั้ง</button>
+          <button class="language-button" id="language-button" type="button" aria-label="Switch language">EN</button>
+          <button class="sync-chip" id="refresh-button" type="button" data-tone="loading" aria-busy="true" disabled>
+            <span class="signal-dot" aria-hidden="true"></span>
+            <span class="sync-copy">
+              <span id="sync-label" data-i18n="กำลังเชื่อมต่อ">กำลังเชื่อมต่อ</span>
+              <span class="sync-action" id="refresh-label" data-i18n="รอสักครู่">รอสักครู่</span>
+            </span>
+          </button>
         </div>
       </header>
 

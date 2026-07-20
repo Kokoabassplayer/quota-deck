@@ -6,11 +6,13 @@ const config = loadRuntimeConfig(process.env);
 const codexBarClient = createCodexBarClient({
   token: config.dashboardToken,
   origin: config.codexBarOrigin,
+  provider: process.env.QUOTA_DECK_CODEXBAR_PROVIDER,
 });
 const server = createQuotaDeckServer({
   codexBarClient,
   allowedHosts: config.allowedHosts,
   publicOrigin: config.publicOrigin,
+  instanceID: process.env.QUOTA_DECK_INSTANCE_ID,
 });
 const WARM_INTERVAL_MS = 90_000;
 let warmTimer = null;
