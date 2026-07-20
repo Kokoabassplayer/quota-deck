@@ -111,6 +111,7 @@ export async function setupQuotaDeck(options, context = {}) {
     routeTarget: target,
     servePort,
     tokenFile: paths.token,
+    zaiTokenFile: paths.zaiToken,
     installedAt: new Date().toISOString(),
   };
 
@@ -349,12 +350,33 @@ async function writeWindowsServiceFiles(state, paths) {
   const pathLine = pathParts.length > 0
     ? `$env:Path = ${pathParts.join(" + ';' + ")} + ';' + $env:Path\n`
     : "";
-  const codexbar = `${pathLine}& ${ps(state.codexBarExecutable)} ${state.codexBarArgs.map(ps).join(" ")}\nexit $LASTEXITCODE\n`;
   const providerLine = state.codexBarProvider
     ? `$env:QUOTA_DECK_CODEXBAR_PROVIDER=${ps(state.codexBarProvider)}\n`
     : "";
-  const gateway = `${pathLine}${providerLine}$env:QUOTA_DECK_PORT=${ps(String(state.gatewayPort))}\n$env:QUOTA_DECK_PUBLIC_ORIGIN=${ps(state.publicOrigin)}\n$env:QUOTA_DECK_CODEXBAR_ORIGIN=${ps(`http://127.0.0.1:${state.codexBarPort}`)}\n& ${ps(state.nodeExecutable)} ${ps(path.join(state.runtimePath, "server.mjs"))}\nexit $LASTEXITCODE\n`;
-  await writeFile(path.join(paths.bin, "run-codexbar.ps1"), codexbar);
+  const zaiTokenLines = state.zaiTokenFile
+    ? [
+        `$zaiTokenFile=${ps(state.zaiTokenFile)}`,
+        "if (Test-Path -LiteralPath $zaiTokenFile) {",
+        "  $zaiToken = (Get-Content -Raw -LiteralPath $zaiTokenFile).Trim()",
+        "  if ($zaiToken.Length -gt 0) {",
+        "    $env:Z_AI_API_KEY=$zaiToken",
+        "    $env:QUOTA_DECK_CODEXBAR_PROVIDER='codex,zai'",
+        "  }",
+        "}",
+        "",
+      ].join("\n")
+    : "";
+  const zaiProviderLines = state.zaiTokenFile
+    ? [
+        `$zaiTokenFile=${ps(state.zaiTokenFile)}`,
+        "if (Test-Path -LiteralPath $zaiTokenFile) {",
+        "  $env:QUOTA_DECK_CODEXBAR_PROVIDER='codex,zai'",
+        "}",
+        "",
+      ].join("\n")
+    : "";
+  const gateway = `${pathLine}${providerLine}${zaiProviderLines}$env:QUOTA_DECK_PORT=${ps(String(state.gatewayPort))}\n$env:QUOTA_DECK_PUBLIC_ORIGIN=${ps(state.publicOrigin)}\n$env:QUOTA_DECK_CODEXBAR_ORIGIN=${ps(`http://127.0.0.1:${state.codexBarPort}`)}\n& ${ps(state.nodeExecutable)} ${ps(path.join(state.runtimePath, "server.mjs"))}\nexit $LASTEXITCODE\n`;
+  await writeFile(path.join(paths.bin, "run-codexbar.ps1"), `${pathLine}${providerLine}${zaiTokenLines}& ${ps(state.codexBarExecutable)} ${state.codexBarArgs.map(ps).join(" ")}\nexit $LASTEXITCODE\n`);
   await writeFile(path.join(paths.bin, "run-gateway.ps1"), gateway);
 }
 

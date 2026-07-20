@@ -16,7 +16,9 @@ The wizard checks your computer, asks before installing missing software, opens 
 - Windows 10/11: beta setup using Win-CodexBar legacy `serve` endpoints and limited-user Scheduled Tasks.
 - English and Thai are detected automatically; the dashboard language can be switched at any time.
 
-No repository clone, configuration file, provider token copy, service command, hostname lookup, Docker, or administrator-level Quota Deck service is required. Authentication still needs your interaction because provider and Tailscale login cannot be automated safely.
+No repository clone, configuration file, service command, hostname lookup, Docker, or administrator-level Quota Deck service is required for the Codex-only path. Authentication still needs your interaction because provider and Tailscale login cannot be automated safely.
+
+On Windows, z.ai is optional. To add it, place the API key in the owner-only file `%LOCALAPPDATA%\QuotaDeck\zai-api-key` and run `setup` again. Quota Deck loads that file only into the local CodexBar process, keeps the gateway and browser key-free, and never writes the key to `install.json`, logs, the QR code, or `/api/snapshot`.
 
 ## Commands
 

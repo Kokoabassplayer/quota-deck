@@ -17,6 +17,7 @@ export function installationPaths({ platform = process.platform, home = os.homed
       bin: pathAPI.join(root, "bin"),
       logs: pathAPI.join(home, "Library", "Logs", "QuotaDeck"),
       token: pathAPI.join(root, "dashboard-token"),
+      zaiToken: null,
       state: pathAPI.join(root, "install.json"),
       services: pathAPI.join(home, "Library", "LaunchAgents"),
     };
@@ -30,6 +31,7 @@ export function installationPaths({ platform = process.platform, home = os.homed
       bin: pathAPI.join(root, "bin"),
       logs: pathAPI.join(root, "logs"),
       token: null,
+      zaiToken: pathAPI.join(root, "zai-api-key"),
       state: pathAPI.join(root, "install.json"),
       services: null,
     };

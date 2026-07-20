@@ -350,7 +350,12 @@ test("runs the Windows Scheduled Task lifecycle with native paths", {
   assert.equal(routeOwned, true);
   const paths = installationPaths({ platform: "win32", home, env: context.env });
   const gatewayScript = await readFile(path.join(paths.bin, "run-gateway.ps1"), "utf8");
+  const codexbarScript = await readFile(path.join(paths.bin, "run-codexbar.ps1"), "utf8");
   assert.match(gatewayScript, /QUOTA_DECK_CODEXBAR_ORIGIN/u);
+  assert.match(gatewayScript, /zai-api-key/u);
+  assert.match(gatewayScript, /codex,zai/u);
+  assert.match(codexbarScript, /Z_AI_API_KEY/u);
+  assert.match(codexbarScript, /zai-api-key/u);
   assert.match(gatewayScript, /App Data/u);
   const taskCreates = calls.filter(({ command, args }) => command === "schtasks.exe" && args[0] === "/Create");
   assert.equal(taskCreates.length, 2);

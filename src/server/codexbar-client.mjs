@@ -43,7 +43,7 @@ export function createCodexBarClient(options = {}) {
   const enrichmentTimeoutMs = options.enrichmentTimeoutMs ?? Math.min(timeoutMs, 12_000);
   const maxResponseBytes = options.maxResponseBytes ?? 4 * 1024 * 1024;
   const origin = options.origin ?? DEFAULT_CODEXBAR_ORIGIN;
-  const provider = normalizeProviderSelector(options.provider);
+  const providers = normalizeProviderSelectors(options.provider);
   const shutdownController = new AbortController();
   let lastGoodSnapshot = null;
   let lastGoodEnrichment = emptyEnrichment();
@@ -97,26 +97,58 @@ export function createCodexBarClient(options = {}) {
 
     // Keep the legacy fallback quota-only. An unfiltered /usage request honors
     // CodexBar's enabled-provider config; provider=all fans out to every
-    // registered integration and can stall the critical dashboard path.
-    const usagePath = provider ? `/usage?provider=${encodeURIComponent(provider)}` : "/usage";
-    const usageResponse = await fetchJSON(usagePath, {
-      origin,
-      fetchImpl,
-      timeoutMs,
-      maxResponseBytes,
-      shutdownSignal: shutdownController.signal,
-    });
+    // registered integration and can stall the critical dashboard path. When
+    // a small explicit provider list is configured (for example Windows
+    // `codex,zai`), query each provider independently so one unavailable
+    // integration cannot hide the others.
+    const selectors = providers.length > 0 ? providers : [null];
+    const usageResults = await Promise.all(selectors.map(async (selector) => {
+      const usagePath = selector
+        ? `/usage?provider=${encodeURIComponent(selector)}`
+        : "/usage";
+      try {
+        const response = await fetchJSON(usagePath, {
+          origin,
+          fetchImpl,
+          timeoutMs,
+          maxResponseBytes,
+          shutdownSignal: shutdownController.signal,
+        });
+        return { selector, response };
+      } catch (error) {
+        return { selector, error };
+      }
+    }));
 
-    if (usageResponse.status !== 200 || !Array.isArray(usageResponse.body)) {
-      throw new CodexBarUpstreamError("CodexBar usage request failed", {
-        status: usageResponse.status === 504 ? 504 : 502,
+    const usage = [];
+    for (const result of usageResults) {
+      if (
+        !result.error
+        && result.response.status === 200
+        && Array.isArray(result.response.body)
+      ) {
+        usage.push(...result.response.body);
+        continue;
+      }
+      if (!result.selector) {
+        throw new CodexBarUpstreamError("CodexBar usage request failed", {
+          status: result.response?.status === 504 || result.error?.status === 504 ? 504 : 502,
+          cause: result.error,
+        });
+      }
+      usage.push({
+        provider: result.selector,
+        error: {
+          code: "provider_error",
+          kind: legacyProviderErrorKind(result.response?.status ?? result.error?.status),
+        },
       });
     }
 
     const snapshot = normalizeCodexBarSnapshot({
       fetchedAt: now().toISOString(),
       health: null,
-      usage: usageResponse.body,
+      usage,
       cost: [],
       mode: "legacy",
     });
@@ -496,10 +528,25 @@ function normalizeToken(value) {
   return trimmed;
 }
 
-function normalizeProviderSelector(value) {
-  if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string" || !/^[a-z0-9_-]{1,32}$/u.test(value)) {
+function normalizeProviderSelectors(value) {
+  if (value === undefined || value === null || value === "") return [];
+  const values = Array.isArray(value) ? value : String(value).split(",");
+  const selectors = values
+    .map((item) => typeof item === "string" ? item.trim().toLowerCase() : item)
+    .filter((item) => item !== "");
+  if (
+    selectors.length === 0
+    || selectors.length > 8
+    || selectors.some((item) => typeof item !== "string" || !/^[a-z0-9_-]{1,32}$/u.test(item))
+  ) {
     throw new TypeError("CodexBar provider selector is invalid");
   }
-  return value;
+  return [...new Set(selectors)];
+}
+
+function legacyProviderErrorKind(status) {
+  if (status === 408 || status === 504) return "timeout";
+  if (status === 429) return "rate_limited";
+  if (Number.isInteger(status) && status >= 500) return "unavailable";
+  return "provider_error";
 }
