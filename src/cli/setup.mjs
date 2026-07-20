@@ -47,7 +47,8 @@ export async function setupQuotaDeck(options, context = {}) {
 
   report = await ensurePrerequisites(report, options, { ...context, io, run, locate, platform, env });
   const previousState = await readState(paths.state);
-  if (report.ports.gateway.inUse && previousState?.gatewayPort !== options.gatewayPort) {
+  const ownsPreviousConfig = previousState?.platform === platform;
+  if (report.ports.gateway.inUse && (!ownsPreviousConfig || previousState.gatewayPort !== options.gatewayPort)) {
     throw setupError(
       localized(
         context.locale,
@@ -57,7 +58,7 @@ export async function setupQuotaDeck(options, context = {}) {
       73,
     );
   }
-  if (report.ports.codexBar.inUse && previousState?.codexBarPort !== options.codexBarPort) {
+  if (report.ports.codexBar.inUse && (!ownsPreviousConfig || previousState.codexBarPort !== options.codexBarPort)) {
     throw setupError(
       localized(
         context.locale,
@@ -77,7 +78,14 @@ export async function setupQuotaDeck(options, context = {}) {
 
   const target = `http://127.0.0.1:${options.gatewayPort}`;
   const serveStatus = await run(executables.tailscale, ["serve", "status", "--json"]);
-  const serveStatusJSON = serveStatus.code === 0 ? serveStatus.stdout : "";
+  if (serveStatus.code !== 0) {
+    throw setupError(localized(
+      context.locale,
+      "Could not read Tailscale Serve status. Quota Deck will not change any Serve route.",
+      "อ่านสถานะ Tailscale Serve ไม่สำเร็จ Quota Deck จะไม่เปลี่ยนเส้นทาง Serve ใด ๆ",
+    ), 69);
+  }
+  const serveStatusJSON = serveStatus.stdout;
   const previousServePort = previousState?.servePort ?? 443;
   const selectedServe = chooseServePort(serveStatusJSON, target, {
     platform,
@@ -116,8 +124,29 @@ export async function setupQuotaDeck(options, context = {}) {
   };
 
   try {
-    if (previousState?.platform === "win32") {
-      await stopPreviousWindowsProcesses(previousState, { run });
+    if (previousState?.platform === platform) {
+      // Do not trust install.json alone to identify whoever owns a bound
+      // loopback port. Stop Quota Deck's known generation, remove its
+      // launch/task registration, and prove both ports are free before the
+      // new generation can receive the retained Serve route.
+      if (platform === "win32") await stopPreviousWindowsProcesses(previousState, { run });
+      await unregisterServices(platform, paths, { run });
+      report = await collectDoctorReport({
+        platform,
+        env,
+        codexBarPort: options.codexBarPort,
+        gatewayPort: options.gatewayPort,
+        runCommand: run,
+        firstExecutable: locate,
+        checkPort: context.checkPort,
+      });
+      if (report.ports.gateway.inUse || report.ports.codexBar.inUse) {
+        throw setupError(localized(
+          context.locale,
+          "Quota Deck could not reclaim its previous loopback ports. An unknown local service may be using them; no replacement was started.",
+          "Quota Deck ยึดพอร์ต loopback เดิมคืนไม่ได้ อาจมีบริการอื่นใช้งานอยู่ จึงไม่เริ่มบริการทดแทน",
+        ), 73);
+      }
     }
     await stageRuntime(runtimePath);
     await mkdir(paths.bin, { recursive: true });

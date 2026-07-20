@@ -216,6 +216,44 @@ test("failed fresh setup removes its runtime, services, logs, token, and Serve r
   assert.equal(routeOwned, false);
 });
 
+test("fails closed when Tailscale Serve status cannot be read", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "quota-deck-serve-status-error-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const runCommand = async (_command, args) => {
+    if (args[0] === "status" && args[1] === "--json") {
+      return result(JSON.stringify({
+        BackendState: "Running",
+        Self: { DNSName: "status-error.example.ts.net." },
+      }));
+    }
+    if (args[0] === "serve" && args[1] === "status") return result("", 1);
+    if (args[0] === "serve" && args.includes("--help")) {
+      return result("--host --port --refresh-interval --request-timeout --log-level");
+    }
+    if (args[0] === "--version" || args[0] === "version") return result("test version");
+    return result("");
+  };
+  const firstExecutable = async (candidates) => candidates.some((value) => String(value).includes("Tailscale"))
+    ? "/Applications/Tailscale.app/Contents/MacOS/Tailscale"
+    : candidates.some((value) => String(value).includes("CodexBar"))
+      ? "/Applications/CodexBar.app/Contents/Helpers/CodexBarCLI"
+      : "/opt/homebrew/bin/brew";
+
+  await assert.rejects(
+    setupQuotaDeck(setupOptions(), {
+      platform: "darwin",
+      home,
+      env: {},
+      runCommand,
+      firstExecutable,
+      checkPort: async () => false,
+      io: { log() {} },
+    }),
+    /Could not read Tailscale Serve status/u,
+  );
+  await assert.rejects(() => access(path.join(home, "Library", "Application Support", "QuotaDeck")));
+});
+
 test("installs, upgrades, and uninstalls atomically without touching unrelated software", async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), "quota-deck-home-"));
   t.after(() => rm(home, { recursive: true, force: true }));
@@ -283,6 +321,15 @@ test("installs, upgrades, and uninstalls atomically without touching unrelated s
   assert.equal(restored.runtimePath, first.state.runtimePath);
   await access(first.state.runtimePath);
   assert.equal(routeOwned, true);
+
+  await assert.rejects(
+    setupQuotaDeck(options, {
+      ...context,
+      checkPort: async () => true,
+    }),
+    /could not reclaim its previous loopback ports/u,
+  );
+  await access(first.state.runtimePath);
 
   const second = await setupQuotaDeck(options, context);
   assert.equal(second.status, "installed");
