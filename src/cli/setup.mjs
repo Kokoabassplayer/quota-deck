@@ -405,8 +405,26 @@ async function registerServices(state, paths, { run }) {
       "/TN", WINDOWS_TASKS[index], "/TR", taskCommand,
     ]);
     if (created.code !== 0) throw setupError(`Could not register ${WINDOWS_TASKS[index]}`, 69);
-    await run("schtasks.exe", ["/Run", "/TN", WINDOWS_TASKS[index]]);
   }
+  const reliabilityScript = [
+    `$names = @(${WINDOWS_TASKS.map(ps).join(", ")})`,
+    "foreach ($name in $names) {",
+    "  $task = Get-ScheduledTask -TaskName $name -ErrorAction Stop",
+    "  $settings = $task.Settings",
+    "  $settings.DisallowStartIfOnBatteries = $false",
+    "  $settings.StopIfGoingOnBatteries = $false",
+    "  $settings.StartWhenAvailable = $true",
+    "  $settings.IdleSettings.StopOnIdleEnd = $false",
+    "  $settings.RestartCount = 3",
+    "  $settings.RestartInterval = 'PT1M'",
+    "  Set-ScheduledTask -TaskName $name -Settings $settings -ErrorAction Stop | Out-Null",
+    "}",
+  ].join("\n");
+  const shellSettings = await run(shell, [
+    "-NoProfile", "-NonInteractive", "-Command", reliabilityScript,
+  ]);
+  if (shellSettings.code !== 0) throw setupError("Could not apply Windows task reliability settings", 69);
+  for (const task of WINDOWS_TASKS) await run("schtasks.exe", ["/Run", "/TN", task]);
 }
 
 export async function unregisterServices(platform, paths, { run = runCommand } = {}) {
