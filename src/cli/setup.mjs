@@ -8,6 +8,7 @@ import qrCode from "qrcode-terminal";
 import { collectDoctorReport, formatDoctorReport } from "./doctor.mjs";
 import {
   codexBarServeArgs,
+  chooseServePort,
   executableCandidates,
   inspectServeStatus,
   installationPaths,
@@ -76,14 +77,20 @@ export async function setupQuotaDeck(options, context = {}) {
 
   const target = `http://127.0.0.1:${options.gatewayPort}`;
   const serveStatus = await run(executables.tailscale, ["serve", "status", "--json"]);
-  const route = inspectServeStatus(serveStatus.code === 0 ? serveStatus.stdout : "", target);
-  if (route.state === "occupied") {
+  const serveStatusJSON = serveStatus.code === 0 ? serveStatus.stdout : "";
+  const previousServePort = previousState?.servePort ?? 443;
+  const selectedServe = chooseServePort(serveStatusJSON, target, {
+    platform,
+    preferred: previousServePort,
+  });
+  if (selectedServe.state === "occupied" || selectedServe.port === null) {
     throw setupError(localized(
       context.locale,
-      "Tailscale Serve already has a route. Quota Deck will not overwrite it.",
-      "Tailscale Serve มีเส้นทางอยู่แล้ว Quota Deck จะไม่เขียนทับ",
+      "No unused Tailscale Serve HTTPS listener is available. Quota Deck will not overwrite an existing route.",
+      "ไม่มี HTTPS listener ของ Tailscale Serve ที่ว่าง Quota Deck จะไม่เขียนทับเส้นทางเดิม",
     ), 73);
   }
+  const servePort = selectedServe.port;
 
   const version = context.packageVersion ?? await packageVersion(PACKAGE_ROOT);
   const runtimePath = path.join(paths.versions, `${version}-${Date.now()}`);
@@ -99,8 +106,9 @@ export async function setupQuotaDeck(options, context = {}) {
     codexBarArgs: codexBarServeArgs(serveHelp.stdout, { port: options.codexBarPort, platform }),
     codexBarPort: options.codexBarPort,
     gatewayPort: options.gatewayPort,
-    publicOrigin: `https://${report._tailscaleDNSName}`,
+    publicOrigin: `https://${report._tailscaleDNSName}${servePort === 443 ? "" : `:${servePort}`}`,
     routeTarget: target,
+    servePort,
     tokenFile: paths.token,
     installedAt: new Date().toISOString(),
   };
@@ -116,8 +124,9 @@ export async function setupQuotaDeck(options, context = {}) {
     await writeServiceFiles(state, paths);
     await registerServices(state, paths, { run });
 
-    if (route.state === "empty") {
-      const configured = await run(executables.tailscale, ["serve", "--bg", "--yes", target]);
+    if (selectedServe.state === "empty") {
+      const servePortFlag = servePort === 443 ? [] : [`--https=${servePort}`];
+      const configured = await run(executables.tailscale, ["serve", "--bg", "--yes", ...servePortFlag, target]);
       if (configured.code !== 0) {
         throw setupError(localized(context.locale, "Tailscale Serve could not be configured", "ตั้งค่า Tailscale Serve ไม่สำเร็จ"), 69);
       }
@@ -131,9 +140,9 @@ export async function setupQuotaDeck(options, context = {}) {
     await removeOldVersions(paths.versions, runtimePath);
   } catch (error) {
     await unregisterServices(platform, paths, { run }).catch(() => undefined);
-    if (route.state === "empty") {
+    if (selectedServe.state === "empty") {
       const current = await run(executables.tailscale, ["serve", "status", "--json"]).catch(() => null);
-      if (current?.code === 0 && inspectServeStatus(current.stdout, target).state === "owned") {
+      if (current?.code === 0 && inspectServeStatus(current.stdout, target, servePort).state === "owned") {
         await disableServeRoute(state, { run }).catch(() => undefined);
       }
     }
@@ -367,7 +376,7 @@ export async function unregisterServices(platform, paths, { run = runCommand } =
 }
 
 export async function disableServeRoute(state, { run = runCommand } = {}) {
-  return run(state.tailscaleExecutable, ["serve", "--https=443", "off"]);
+  return run(state.tailscaleExecutable, ["serve", `--https=${state.servePort ?? 443}`, "off"]);
 }
 
 async function waitForURL(url, timeoutMs, fetchImpl = globalThis.fetch) {

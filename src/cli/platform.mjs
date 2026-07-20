@@ -93,42 +93,75 @@ export function parseTailscaleStatus(value) {
   return { connected: state === "Running" && Boolean(dnsName), dnsName };
 }
 
-export function inspectServeStatus(value, target) {
+export function inspectServeStatus(value, target, port = 443) {
   if (!value || !String(value).trim()) return { state: "empty" };
   let parsed;
   try { parsed = JSON.parse(value); } catch { return { state: "occupied" }; }
   if (!parsed || (typeof parsed === "object" && Object.keys(parsed).length === 0)) {
     return { state: "empty" };
   }
-  return isExactQuotaDeckRoute(parsed, target) ? { state: "owned" } : { state: "occupied" };
+  const entries = webEntriesForPort(parsed, port);
+  if (entries.length === 0 && !hasPort(parsed, port)) return { state: "empty" };
+  return isExactQuotaDeckRoute(parsed, target, port) ? { state: "owned" } : { state: "occupied" };
 }
 
-function isExactQuotaDeckRoute(parsed, target) {
-  const web = parsed.Web ?? parsed.web;
-  if (!web || typeof web !== "object" || Array.isArray(web)) return false;
-  const servers = (web.Handlers ?? web.handlers) ? [web] : Object.values(web);
-  if (servers.length !== 1) return false;
-  const handlers = servers[0]?.Handlers ?? servers[0]?.handlers;
+/**
+ * Pick a Tailscale Serve HTTPS listener without replacing an existing one.
+ * Windows machines commonly already use 443 for another homelab service, so
+ * the beta setup can safely fall back to the documented alternate listeners.
+ */
+export function chooseServePort(value, target, {
+  platform = process.platform,
+  preferred = 443,
+} = {}) {
+  const candidates = [...new Set([
+    preferred,
+    ...(platform === "win32" ? [8443, 10000] : []),
+  ])];
+  for (const port of candidates) {
+    const result = inspectServeStatus(value, target, port);
+    if (result.state === "owned") return { port, state: "owned" };
+    if (result.state === "empty") return { port, state: "empty" };
+  }
+  return { port: null, state: "occupied" };
+}
+
+function isExactQuotaDeckRoute(parsed, target, port) {
+  const webEntries = webEntriesForPort(parsed, port);
+  if (webEntries.length !== 1) return false;
+  const web = webEntries[0][1];
+  const handlers = web?.Handlers ?? web?.handlers;
   if (!handlers || typeof handlers !== "object" || Array.isArray(handlers)) return false;
-  const entries = Object.entries(handlers);
-  if (entries.length !== 1 || entries[0][0] !== "/") return false;
-  const handler = entries[0][1];
+  const handlerEntries = Object.entries(handlers);
+  if (handlerEntries.length !== 1 || handlerEntries[0][0] !== "/") return false;
+  const handler = handlerEntries[0][1];
   if (!handler || typeof handler !== "object" || Array.isArray(handler)) return false;
   const proxy = handler.Proxy ?? handler.proxy;
   if (proxy !== target) return false;
   const handlerKeys = Object.keys(handler).map((key) => key.toLowerCase());
   if (handlerKeys.some((key) => key !== "proxy")) return false;
 
-  const tcp = parsed.TCP ?? parsed.tcp;
-  if (tcp && typeof tcp === "object") {
-    const ports = Object.keys(tcp);
-    if (ports.some((port) => port !== "443")) return false;
-  }
   const funnel = parsed.AllowFunnel ?? parsed.allowFunnel;
-  if (funnel && typeof funnel === "object" && Object.values(funnel).some(Boolean)) return false;
-  for (const [key, item] of Object.entries(parsed)) {
-    if (["web", "tcp", "allowfunnel", "foreground"].includes(key.toLowerCase())) continue;
-    if (item && (typeof item !== "object" || Object.keys(item).length > 0)) return false;
-  }
+  if (funnel && typeof funnel === "object" && Boolean(funnel[String(port)] ?? funnel[port])) return false;
   return true;
+}
+
+function webEntriesForPort(parsed, port) {
+  const web = parsed?.Web ?? parsed?.web;
+  if (!web || typeof web !== "object" || Array.isArray(web)) return [];
+  if (web.Handlers ?? web.handlers) return port === 443 ? [["", web]] : [];
+  return Object.entries(web).filter(([key]) => servePortFromKey(key) === port);
+}
+
+function servePortFromKey(value) {
+  const text = String(value);
+  const match = text.match(/:(\d+)$/u);
+  return match ? Number(match[1]) : 443;
+}
+
+function hasPort(parsed, port) {
+  const tcp = parsed?.TCP ?? parsed?.tcp;
+  if (tcp && typeof tcp === "object" && Object.prototype.hasOwnProperty.call(tcp, String(port))) return true;
+  const funnel = parsed?.AllowFunnel ?? parsed?.allowFunnel;
+  return Boolean(funnel && typeof funnel === "object" && Object.prototype.hasOwnProperty.call(funnel, String(port)));
 }

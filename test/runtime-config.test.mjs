@@ -32,6 +32,15 @@ test("accepts one exact Tailscale Serve HTTPS origin", () => {
   );
 });
 
+test("accepts an explicit HTTPS listener port for a non-default Serve route", () => {
+  assert.equal(
+    loadRuntimeConfig({
+      QUOTA_DECK_PUBLIC_ORIGIN: "https://quota-deck.example-tailnet.ts.net:8443",
+    }).publicOrigin,
+    "https://quota-deck.example-tailnet.ts.net:8443",
+  );
+});
+
 test("accepts one strict loopback CodexBar origin override", () => {
   assert.equal(
     loadRuntimeConfig({ QUOTA_DECK_CODEXBAR_ORIGIN: "http://127.0.0.1:9090" }).codexBarOrigin,

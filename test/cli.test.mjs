@@ -9,6 +9,7 @@ import { collectDoctorReport } from "../src/cli/doctor.mjs";
 import { runCLI } from "../src/cli/index.mjs";
 import {
   codexBarServeArgs,
+  chooseServePort,
   inspectServeStatus,
   installationPaths,
   parseTailscaleStatus,
@@ -87,6 +88,29 @@ test("extracts a privacy-safe Tailscale identity and protects existing Serve rou
       },
     }), "http://127.0.0.1:8787"),
     { state: "occupied" },
+  );
+  const existingRoute = JSON.stringify({
+    TCP: { "443": { HTTPS: true } },
+    Web: {
+      "friend-machine.example.ts.net:443": { Handlers: { "/": { Proxy: "http://127.0.0.1:3000" } } },
+    },
+  });
+  assert.deepEqual(inspectServeStatus(existingRoute, "http://127.0.0.1:8787", 443), { state: "occupied" });
+  assert.deepEqual(inspectServeStatus(existingRoute, "http://127.0.0.1:8787", 8443), { state: "empty" });
+  assert.deepEqual(
+    chooseServePort(existingRoute, "http://127.0.0.1:8787", { platform: "win32" }),
+    { port: 8443, state: "empty" },
+  );
+  const ownedAlternate = JSON.stringify({
+    TCP: { "443": { HTTPS: true }, "8443": { HTTPS: true } },
+    Web: {
+      "friend-machine.example.ts.net:443": { Handlers: { "/": { Proxy: "http://127.0.0.1:3000" } } },
+      "friend-machine.example.ts.net:8443": { Handlers: { "/": { Proxy: "http://127.0.0.1:8787" } } },
+    },
+  });
+  assert.deepEqual(
+    chooseServePort(ownedAlternate, "http://127.0.0.1:8787", { platform: "win32" }),
+    { port: 8443, state: "owned" },
   );
 });
 

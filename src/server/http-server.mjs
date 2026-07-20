@@ -228,7 +228,7 @@ function normalizeOrigin(value) {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new TypeError("Public origin must use HTTP or HTTPS");
   }
-  if (parsed.username || parsed.password || parsed.port || parsed.pathname !== "/" || parsed.search || parsed.hash) {
+  if (parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
     throw new TypeError("Public origin must be origin-only");
   }
   return parsed.origin;

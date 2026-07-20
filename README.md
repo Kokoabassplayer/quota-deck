@@ -10,7 +10,7 @@ Install [Node.js 22 or newer](https://nodejs.org/), then run:
 npx quota-deck@latest setup
 ```
 
-The wizard checks your computer, asks before installing missing software, opens the login screens, installs a private background runtime, configures an unused Tailscale Serve root route, and shows a mobile URL with a locally generated QR code.
+The wizard checks your computer, asks before installing missing software, opens the login screens, installs a private background runtime, configures an unused Tailscale Serve HTTPS listener (falling back to `:8443`/`:10000` on Windows when `:443` already serves another homelab app), and shows a mobile URL with a locally generated QR code.
 
 - macOS: stable setup using CodexBar and LaunchAgents; it uses the authenticated local dashboard endpoint when available and a bounded legacy fallback otherwise.
 - Windows 10/11: beta setup using Win-CodexBar legacy `serve` endpoints and limited-user Scheduled Tasks.
