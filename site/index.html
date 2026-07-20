@@ -4,29 +4,79 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0a0f0e">
-    <meta name="description" content="Quota Deck is a private, mobile-first AI quota monitor for CodexBar and Tailscale.">
+    <meta name="author" content="Kokoabassplayer">
+    <meta name="description" content="Quota Deck is a private, mobile-first AI quota monitor for CodexBar and Tailscale. Install it with one command and keep credentials on your own computer.">
+    <meta name="robots" content="index, follow, max-image-preview:large">
     <meta name="color-scheme" content="dark light">
+    <link rel="canonical" href="https://kokoabassplayer.github.io/quota-deck/">
     <meta property="og:title" content="Quota Deck | Private AI quota monitoring">
     <meta property="og:description" content="See provider limits on your phone without sending credentials to a hosted dashboard.">
+    <meta property="og:site_name" content="Quota Deck">
+    <meta property="og:locale" content="en_US">
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://kokoabassplayer.github.io/quota-deck/">
     <meta property="og:image" content="https://kokoabassplayer.github.io/quota-deck/assets/quota-deck-hero.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1672">
+    <meta property="og:image:height" content="941">
+    <meta property="og:image:alt" content="A laptop and phone showing abstract AI quota bars in a private home lab">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Quota Deck | Private AI quota monitoring">
+    <meta name="twitter:description" content="A private, mobile-first AI quota monitor for CodexBar and Tailscale.">
+    <meta name="twitter:image" content="https://kokoabassplayer.github.io/quota-deck/assets/quota-deck-hero.png">
+    <meta name="twitter:image:alt" content="A laptop and phone showing abstract AI quota bars in a private home lab">
+    <link rel="alternate" type="text/plain" href="llms.txt" title="Quota Deck agent context">
     <link rel="icon" href="assets/quota-deck-mark.svg" type="image/svg+xml">
     <link rel="stylesheet" href="styles.css">
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "SoftwareApplication",
+            "name": "Quota Deck",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "macOS, Windows",
+            "description": "A private, mobile-first AI quota monitor for CodexBar and Tailscale.",
+            "url": "https://kokoabassplayer.github.io/quota-deck/",
+            "downloadUrl": "https://www.npmjs.com/package/quota-deck",
+            "codeRepository": "https://github.com/Kokoabassplayer/quota-deck",
+            "image": "https://kokoabassplayer.github.io/quota-deck/assets/quota-deck-hero.png",
+            "license": "https://opensource.org/license/mit/",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "author": {
+              "@type": "Person",
+              "name": "Kokoabassplayer",
+              "url": "https://github.com/Kokoabassplayer"
+            }
+          },
+          {
+            "@type": "WebSite",
+            "name": "Quota Deck",
+            "url": "https://kokoabassplayer.github.io/quota-deck/",
+            "description": "Official product page and installation guide for Quota Deck."
+          }
+        ]
+      }
+    </script>
     <title>Quota Deck | Private AI quota monitoring</title>
   </head>
   <body>
     <a class="skip-link" href="#main-content" data-en="Skip to content" data-th="ข้ามไปยังเนื้อหา">Skip to content</a>
 
     <header class="site-header">
-      <a class="brand" href="." aria-label="Quota Deck home">
+      <a class="brand" href="." aria-label="Quota Deck home" data-en-aria="Quota Deck home" data-th-aria="หน้าแรก Quota Deck">
         <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
         <span class="brand-copy">
           <strong>QUOTA DECK</strong>
           <small>PRIVATE AI RUNWAY</small>
         </span>
       </a>
-      <nav class="site-nav" aria-label="Primary navigation">
+      <nav class="site-nav" aria-label="Primary navigation" data-en-aria="Primary navigation" data-th-aria="เมนูหลัก">
         <a href="#why" data-en="Why it exists" data-th="ทำไมต้องมี">Why it exists</a>
         <a href="#install" data-en="Install" data-th="ติดตั้ง">Install</a>
         <a href="#security" data-en="Security" data-th="ความปลอดภัย">Security</a>
@@ -41,16 +91,15 @@
       <section class="hero section-wrap" aria-labelledby="hero-title">
         <div class="hero-copy reveal">
           <p class="eyebrow" data-en="Private quota monitoring" data-th="ดูโควตาแบบเป็นส่วนตัว">Private quota monitoring</p>
-          <h1 id="hero-title" data-en="See AI limits before they surprise you." data-th="เห็นโควตา AI ก่อนมันจะสร้างปัญหา">See AI limits before they surprise you.</h1>
+          <h1 id="hero-title" data-en="See your AI quota early." data-th="รู้โควตา AI ล่วงหน้า">See your AI quota early.</h1>
           <p class="hero-lede" data-en="One command installs a private dashboard for CodexBar, Tailscale, and your phone." data-th="คำสั่งเดียวติดตั้งแดชบอร์ดส่วนตัวสำหรับ CodexBar, Tailscale และมือถือของคุณ">One command installs a private dashboard for CodexBar, Tailscale, and your phone.</p>
           <div class="hero-actions">
             <a class="button button-primary" href="#install" data-en="Install now" data-th="ติดตั้งเลย">Install now</a>
             <a class="button button-secondary" href="https://github.com/Kokoabassplayer/quota-deck" rel="noreferrer" data-en="View source" data-th="ดูซอร์สโค้ด">View source</a>
           </div>
-          <p class="hero-note" data-en="Open source / local-first / tailnet-only" data-th="โอเพนซอร์ส / ทำงานในเครื่อง / ใช้ได้ใน tailnet">Open source / local-first / tailnet-only</p>
         </div>
         <figure class="hero-visual reveal">
-          <img src="assets/quota-deck-hero.png" alt="A laptop and phone showing abstract quota bars in a private home lab" width="1672" height="941">
+          <img src="assets/quota-deck-hero.png" alt="A laptop and phone showing abstract AI quota bars in a private home lab" width="1672" height="941" loading="eager" fetchpriority="high" decoding="async" sizes="(max-width: 760px) 100vw, 52vw">
           <figcaption data-en="A private view from computer to phone." data-th="มุมมองส่วนตัวจากคอมพิวเตอร์ถึงมือถือ">A private view from computer to phone.</figcaption>
         </figure>
       </section>
@@ -61,7 +110,7 @@
           <h2 id="why-title" data-en="Your quota stays close to home." data-th="ข้อมูลโควตาอยู่ใกล้ตัวคุณ">Your quota stays close to home.</h2>
           <p data-en="Quota Deck reads the providers on your computer and sends only a normalized view through your private tailnet." data-th="Quota Deck อ่านข้อมูลจากผู้ให้บริการบนคอมพิวเตอร์ แล้วส่งเฉพาะข้อมูลที่จำเป็นผ่าน tailnet ส่วนตัว">Quota Deck reads the providers on your computer and sends only a normalized view through your private tailnet.</p>
         </div>
-        <div class="principles reveal" aria-label="Quota Deck principles">
+        <div class="principles reveal" aria-label="Quota Deck principles" data-en-aria="Quota Deck principles" data-th-aria="หลักการของ Quota Deck">
           <article class="principle-row">
             <h3 data-en="Private by default" data-th="เป็นส่วนตัวตั้งแต่ต้น">Private by default</h3>
             <p data-en="Credentials stay on the host. The browser receives quota, reset, and freshness data." data-th="ข้อมูลยืนยันตัวตนอยู่บนเครื่องหลัก เบราว์เซอร์ได้รับเฉพาะโควตา การรีเซ็ต และเวลาข้อมูลล่าสุด">Credentials stay on the host. The browser receives quota, reset, and freshness data.</p>
@@ -90,7 +139,7 @@
           </div>
           <div class="command-line">
             <code>npx quota-deck@latest setup</code>
-            <button class="copy-button" id="copy-command" type="button" data-en="Copy" data-th="คัดลอก" aria-label="Copy setup command">Copy</button>
+            <button class="copy-button" id="copy-command" type="button" data-en="Copy" data-th="คัดลอก" aria-label="Copy setup command" data-en-aria="Copy setup command" data-th-aria="คัดลอกคำสั่งติดตั้ง" aria-live="polite">Copy</button>
           </div>
           <p class="command-caption" data-en="No clone. No config file. No Docker." data-th="ไม่ต้อง clone ไม่ต้องแก้ไฟล์ config ไม่ต้องใช้ Docker">No clone. No config file. No Docker.</p>
         </div>

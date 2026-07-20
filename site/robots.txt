@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://kokoabassplayer.github.io/quota-deck/sitemap.xml

@@ -617,13 +617,13 @@ p {
 }
 
 @media (prefers-reduced-motion: no-preference) {
-  .reveal {
+  .js-ready .reveal {
     opacity: 0;
     transform: translateY(1.1rem);
     transition: opacity 700ms ease, transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  .reveal.is-visible {
+  .js-ready .reveal.is-visible {
     opacity: 1;
     transform: translateY(0);
   }
