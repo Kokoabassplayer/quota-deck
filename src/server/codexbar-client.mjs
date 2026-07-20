@@ -32,6 +32,7 @@ export class CodexBarUpstreamError extends Error {
  *   enrichmentTimeoutMs?: number,
  *   maxResponseBytes?: number,
  *   origin?: string,
+ *   provider?: string,
  * }} options
  */
 export function createCodexBarClient(options = {}) {
@@ -42,6 +43,7 @@ export function createCodexBarClient(options = {}) {
   const enrichmentTimeoutMs = options.enrichmentTimeoutMs ?? Math.min(timeoutMs, 12_000);
   const maxResponseBytes = options.maxResponseBytes ?? 4 * 1024 * 1024;
   const origin = options.origin ?? DEFAULT_CODEXBAR_ORIGIN;
+  const provider = normalizeProviderSelector(options.provider);
   const shutdownController = new AbortController();
   let lastGoodSnapshot = null;
   let lastGoodEnrichment = emptyEnrichment();
@@ -96,7 +98,8 @@ export function createCodexBarClient(options = {}) {
     // Keep the legacy fallback quota-only. An unfiltered /usage request honors
     // CodexBar's enabled-provider config; provider=all fans out to every
     // registered integration and can stall the critical dashboard path.
-    const usageResponse = await fetchJSON("/usage", {
+    const usagePath = provider ? `/usage?provider=${encodeURIComponent(provider)}` : "/usage";
+    const usageResponse = await fetchJSON(usagePath, {
       origin,
       fetchImpl,
       timeoutMs,
@@ -491,4 +494,12 @@ function normalizeToken(value) {
     throw new TypeError("Dashboard token is invalid");
   }
   return trimmed;
+}
+
+function normalizeProviderSelector(value) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string" || !/^[a-z0-9_-]{1,32}$/u.test(value)) {
+    throw new TypeError("CodexBar provider selector is invalid");
+  }
+  return value;
 }

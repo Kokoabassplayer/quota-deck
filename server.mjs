@@ -6,6 +6,7 @@ const config = loadRuntimeConfig(process.env);
 const codexBarClient = createCodexBarClient({
   token: config.dashboardToken,
   origin: config.codexBarOrigin,
+  provider: process.env.QUOTA_DECK_CODEXBAR_PROVIDER,
 });
 const server = createQuotaDeckServer({
   codexBarClient,

@@ -142,6 +142,29 @@ test("falls back to legacy usage when the dashboard endpoint is unavailable", as
   assert.equal(missingDashboard.bodyUsed, true);
 });
 
+test("uses an explicit legacy provider selector for Windows CodexBar", async () => {
+  const calls = [];
+  const client = createCodexBarClient({
+    provider: "codex",
+    fetchImpl: async (url) => {
+      calls.push(String(url));
+      return Response.json(currentUsage);
+    },
+  });
+
+  await client.refreshSnapshot();
+
+  assert.equal(calls[0], "http://127.0.0.1:8080/usage?provider=codex");
+  client.close();
+});
+
+test("rejects an unsafe legacy provider selector", () => {
+  assert.throws(
+    () => createCodexBarClient({ provider: "codex&provider=all" }),
+    /provider selector is invalid/u,
+  );
+});
+
 test("uses a configurable strict loopback origin supplied by runtime configuration", async () => {
   const calls = [];
   const client = createCodexBarClient({

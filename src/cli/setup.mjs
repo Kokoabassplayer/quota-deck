@@ -104,6 +104,7 @@ export async function setupQuotaDeck(options, context = {}) {
     tailscaleExecutable: executables.tailscale,
     nodeExecutable: process.execPath,
     codexBarArgs: codexBarServeArgs(serveHelp.stdout, { port: options.codexBarPort, platform }),
+    codexBarProvider: platform === "win32" ? "codex" : null,
     codexBarPort: options.codexBarPort,
     gatewayPort: options.gatewayPort,
     publicOrigin: `https://${report._tailscaleDNSName}${servePort === 443 ? "" : `:${servePort}`}`,
@@ -343,7 +344,10 @@ async function writeWindowsServiceFiles(state, paths) {
     ? `$env:Path = ${pathParts.join(" + ';' + ")} + ';' + $env:Path\n`
     : "";
   const codexbar = `${pathLine}& ${ps(state.codexBarExecutable)} ${state.codexBarArgs.map(ps).join(" ")}\nexit $LASTEXITCODE\n`;
-  const gateway = `${pathLine}$env:QUOTA_DECK_PORT=${ps(String(state.gatewayPort))}\n$env:QUOTA_DECK_PUBLIC_ORIGIN=${ps(state.publicOrigin)}\n$env:QUOTA_DECK_CODEXBAR_ORIGIN=${ps(`http://127.0.0.1:${state.codexBarPort}`)}\n& ${ps(state.nodeExecutable)} ${ps(path.join(state.runtimePath, "server.mjs"))}\nexit $LASTEXITCODE\n`;
+  const providerLine = state.codexBarProvider
+    ? `$env:QUOTA_DECK_CODEXBAR_PROVIDER=${ps(state.codexBarProvider)}\n`
+    : "";
+  const gateway = `${pathLine}${providerLine}$env:QUOTA_DECK_PORT=${ps(String(state.gatewayPort))}\n$env:QUOTA_DECK_PUBLIC_ORIGIN=${ps(state.publicOrigin)}\n$env:QUOTA_DECK_CODEXBAR_ORIGIN=${ps(`http://127.0.0.1:${state.codexBarPort}`)}\n& ${ps(state.nodeExecutable)} ${ps(path.join(state.runtimePath, "server.mjs"))}\nexit $LASTEXITCODE\n`;
   await writeFile(path.join(paths.bin, "run-codexbar.ps1"), codexbar);
   await writeFile(path.join(paths.bin, "run-gateway.ps1"), gateway);
 }
@@ -363,6 +367,10 @@ async function registerServices(state, paths, { run }) {
   const shell = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
   const scripts = [path.join(paths.bin, "run-codexbar.ps1"), path.join(paths.bin, "run-gateway.ps1")];
   for (let index = 0; index < WINDOWS_TASKS.length; index += 1) {
+    // Stop an older generation before replacing its task definition. Without
+    // this, `schtasks /Run` leaves the old listener alive and an upgrade can
+    // appear healthy while still serving stale provider data.
+    await run("schtasks.exe", ["/End", "/TN", WINDOWS_TASKS[index]]);
     const taskCommand = `"${shell}" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "${scripts[index]}"`;
     const created = await run("schtasks.exe", [
       "/Create", "/F", "/SC", "ONLOGON", "/RL", "LIMITED",
