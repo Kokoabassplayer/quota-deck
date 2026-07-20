@@ -143,6 +143,9 @@ export async function setupQuotaDeck(options, context = {}) {
     await atomicWriteJSON(paths.state, state);
     await removeOldVersions(paths.versions, runtimePath);
   } catch (error) {
+    if (platform === "win32") {
+      await stopPreviousWindowsProcesses(state, { run }).catch(() => undefined);
+    }
     await unregisterServices(platform, paths, { run }).catch(() => undefined);
     if (selectedServe.state === "empty") {
       const current = await run(executables.tailscale, ["serve", "status", "--json"]).catch(() => null);
@@ -401,14 +404,12 @@ export async function disableServeRoute(state, { run = runCommand } = {}) {
 
 async function stopPreviousWindowsProcesses(state, { run }) {
   const shell = `${process.env.SystemRoot ?? "C:\\Windows"}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`;
-  const runtime = ps(state.runtimePath);
   const codexBar = ps(state.codexBarExecutable);
   const script = [
-    `$runtime=${runtime}`,
     `$codexBar=${codexBar}`,
     "$processes = Get-CimInstance Win32_Process | Where-Object {",
     "  $_.ExecutablePath -eq $codexBar -or",
-    "  ($_.ExecutablePath -eq 'C:\\Program Files\\nodejs\\node.exe' -and $_.CommandLine -like \"*$runtime*\")",
+    "  ($_.ExecutablePath -eq 'C:\\Program Files\\nodejs\\node.exe' -and $_.CommandLine -like '*\\QuotaDeck\\versions\\*\\server.mjs*')",
     "}",
     "$processes | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
   ].join("\n");

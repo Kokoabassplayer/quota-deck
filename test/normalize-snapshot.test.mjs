@@ -85,6 +85,76 @@ test("normalizes current CodexBar usage without leaking account or project data"
   assert.doesNotMatch(serialized, /\/Users\/example/);
 });
 
+test("normalizes Windows CodexBar snake_case quota fields and extra windows", () => {
+  const snapshot = normalizeCodexBarSnapshot({
+    fetchedAt,
+    usage: [
+      {
+        provider: "codex",
+        source: "oauth",
+        usage: {
+          primary: {
+            used_percent: 24,
+            window_minutes: 10080,
+            resets_at: "2026-07-27T04:04:54Z",
+          },
+          secondary: { used_percent: 0 },
+          extra_rate_windows: [
+            {
+              id: "codex-spark-weekly",
+              title: "Codex Spark Weekly",
+              window: {
+                used_percent: 0,
+                window_minutes: 10080,
+                resets_at: "2026-07-27T11:23:34Z",
+              },
+            },
+            {
+              id: "reset-credits",
+              title: "Reset credits",
+              window: { used_percent: 0 },
+            },
+          ],
+          updated_at: "2026-07-20T11:23:34.934Z",
+        },
+      },
+    ],
+    cost: [],
+    mode: "legacy",
+  });
+
+  assert.equal(snapshot.providers[0].updatedAt, "2026-07-20T11:23:34.934Z");
+  assert.deepEqual(snapshot.providers[0].windows, [
+    {
+      kind: "weekly",
+      label: "WEEK",
+      usedPercent: 24,
+      remainingPercent: 76,
+      windowMinutes: 10080,
+      resetsAt: "2026-07-27T04:04:54Z",
+      synthetic: false,
+    },
+    {
+      kind: "weekly",
+      label: "WEEKLY",
+      usedPercent: 0,
+      remainingPercent: 100,
+      windowMinutes: null,
+      resetsAt: null,
+      synthetic: false,
+    },
+    {
+      kind: "weekly",
+      label: "CODEX SPARK WEEKLY",
+      usedPercent: 0,
+      remainingPercent: 100,
+      windowMinutes: 10080,
+      resetsAt: "2026-07-27T11:23:34Z",
+      synthetic: false,
+    },
+  ]);
+});
+
 test("classifies Claude and z.ai windows and keeps provider errors non-sensitive", () => {
   const snapshot = normalizeCodexBarSnapshot({
     fetchedAt,
