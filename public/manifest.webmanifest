@@ -2,6 +2,7 @@
   "name": "Quota Deck",
   "short_name": "Quota Deck",
   "description": "Private mobile dashboard for CodexBar quota windows.",
+  "id": "/quota-deck",
   "lang": "th",
   "dir": "ltr",
   "start_url": "/",
