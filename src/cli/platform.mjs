@@ -8,7 +8,7 @@ export function supportedPlatform(platform = process.platform) {
 }
 
 export function installationPaths({ platform = process.platform, home = os.homedir(), env = process.env } = {}) {
-  const pathAPI = platform === "win32" ? path.win32 : path;
+  const pathAPI = platform === "win32" ? path.win32 : path.posix;
   if (platform === "darwin") {
     const root = pathAPI.join(home, "Library", "Application Support", "QuotaDeck");
     return {

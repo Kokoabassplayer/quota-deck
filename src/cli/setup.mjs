@@ -299,7 +299,7 @@ async function writeServiceFiles(state, paths) {
 }
 
 async function writeMacServiceFiles(state, paths) {
-  const uid = process.getuid();
+  const uid = currentUserID();
   const loader = `#!/bin/sh\nset -eu\nTOKEN_FILE=${sh(state.tokenFile)}\n[ -f "$TOKEN_FILE" ] && [ ! -L "$TOKEN_FILE" ] || exit 78\n[ "$(/usr/bin/stat -f '%u:%Lp' "$TOKEN_FILE")" = '${uid}:600' ] || exit 78\nIFS= read -r CODEXBAR_DASHBOARD_TOKEN < "$TOKEN_FILE"\nexport CODEXBAR_DASHBOARD_TOKEN\n`;
   const codexbar = `#!/bin/sh\nset -eu\numask 077\n. ${sh(path.join(paths.bin, "load-dashboard-token.sh"))}\nexec ${sh(state.codexBarExecutable)} ${state.codexBarArgs.map(sh).join(" ")}\n`;
   const gateway = `#!/bin/sh\nset -eu\numask 077\n. ${sh(path.join(paths.bin, "load-dashboard-token.sh"))}\nexport QUOTA_DECK_PORT=${sh(String(state.gatewayPort))}\nexport QUOTA_DECK_PUBLIC_ORIGIN=${sh(state.publicOrigin)}\nexport QUOTA_DECK_CODEXBAR_ORIGIN=${sh(`http://127.0.0.1:${state.codexBarPort}`)}\nexec ${sh(state.nodeExecutable)} ${sh(path.join(state.runtimePath, "server.mjs"))}\n`;
@@ -332,7 +332,7 @@ async function writeWindowsServiceFiles(state, paths) {
 
 async function registerServices(state, paths, { run }) {
   if (state.platform === "darwin") {
-    const domain = `gui/${process.getuid()}`;
+    const domain = `gui/${currentUserID()}`;
     for (const label of MAC_LABELS) {
       const plist = path.join(paths.services, `${label}.plist`);
       await run("/bin/launchctl", ["bootout", domain, plist]);
@@ -357,7 +357,7 @@ async function registerServices(state, paths, { run }) {
 
 export async function unregisterServices(platform, paths, { run = runCommand } = {}) {
   if (platform === "darwin") {
-    const domain = `gui/${process.getuid()}`;
+    const domain = `gui/${currentUserID()}`;
     for (const label of MAC_LABELS) {
       await run("/bin/launchctl", ["bootout", domain, path.join(paths.services, `${label}.plist`)]);
     }
@@ -453,6 +453,10 @@ function xml(value) {
 
 function setupError(message, exitCode) {
   return Object.assign(new Error(message), { publicMessage: message, exitCode });
+}
+
+function currentUserID() {
+  return typeof process.getuid === "function" ? process.getuid() : 0;
 }
 
 function localized(locale, english, thai) {
