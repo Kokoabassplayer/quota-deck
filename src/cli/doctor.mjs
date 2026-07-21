@@ -77,7 +77,7 @@ export function formatDoctorReport(report, locale = "en") {
     `Quota Deck doctor · ${report.platform} ${report.architecture}`,
     `${mark(report.node.supported)} Node ${report.node.version}`,
     `${mark(report.codexBar.installed && report.codexBar.serve)} CodexBar${report.codexBar.version ? ` ${report.codexBar.version}` : ""}`,
-    `${mark(report.tailscale.connected)} Tailscale${report.tailscale.dnsName ? ` · ${report.tailscale.dnsName}` : ""}`,
+    `${mark(report.tailscale.connected)} Tailscale${report.tailscale.version ? ` ${report.tailscale.version}` : ""}`,
     `${report.ports.codexBar.inUse ? "•" : "○"} ${th ? "พอร์ต CodexBar" : "CodexBar port"} ${report.ports.codexBar.port}`,
     `${report.ports.gateway.inUse ? "•" : "○"} ${th ? "พอร์ต gateway" : "Gateway port"} ${report.ports.gateway.port}`,
   ];

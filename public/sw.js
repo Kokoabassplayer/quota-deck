@@ -1,4 +1,4 @@
-const CACHE_NAME = "quota-deck-shell-v10";
+const CACHE_NAME = "quota-deck-shell-v11";
 const SHELL_ASSETS = [
   "/",
   "/app.mjs",

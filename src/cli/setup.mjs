@@ -103,6 +103,10 @@ export async function setupQuotaDeck(options, context = {}) {
   const version = context.packageVersion ?? await packageVersion(PACKAGE_ROOT);
   const runtimePath = path.join(paths.versions, `${version}-${Date.now()}`);
   const token = platform === "darwin" ? randomBytes(32).toString("hex") : null;
+  // Reuse an existing access token across upgrades so saved phone bookmarks keep working.
+  const accessToken = (await readSecretFile(paths.accessToken)) ?? randomBytes(32).toString("hex");
+  const publicOrigin = `https://${report._tailscaleDNSName}${servePort === 443 ? "" : `:${servePort}`}`;
+  const mobileURL = `${publicOrigin}/?t=${accessToken}`;
   const state = {
     schemaVersion: 1,
     instanceID: randomBytes(16).toString("hex"),
@@ -116,10 +120,11 @@ export async function setupQuotaDeck(options, context = {}) {
     codexBarProvider: platform === "win32" ? "codex" : null,
     codexBarPort: options.codexBarPort,
     gatewayPort: options.gatewayPort,
-    publicOrigin: `https://${report._tailscaleDNSName}${servePort === 443 ? "" : `:${servePort}`}`,
+    publicOrigin,
     routeTarget: target,
     servePort,
     tokenFile: paths.token,
+    accessTokenFile: paths.accessToken,
     zaiTokenFile: paths.zaiToken,
     installedAt: new Date().toISOString(),
   };
@@ -156,6 +161,8 @@ export async function setupQuotaDeck(options, context = {}) {
       await writeFile(paths.token, `${token}\n`, { mode: 0o600 });
       await chmod(paths.token, 0o600);
     }
+    await writeFile(paths.accessToken, `${accessToken}\n`, { mode: 0o600 });
+    await chmod(paths.accessToken, 0o600);
     await writeServiceFiles(state, paths);
     await registerServices(state, paths, { run });
 
@@ -180,6 +187,7 @@ export async function setupQuotaDeck(options, context = {}) {
       90_000,
       context.fetchImpl,
       (response) => validateGatewaySnapshot(response, state.instanceID),
+      { Authorization: `Bearer ${accessToken}` },
     );
     await atomicWriteJSON(paths.state, state);
     await removeOldVersions(paths.versions, runtimePath);
@@ -205,13 +213,18 @@ export async function setupQuotaDeck(options, context = {}) {
     throw error;
   }
 
-  const copied = await (context.copyText ?? copyText)(state.publicOrigin, platform);
+  const copied = await (context.copyText ?? copyText)(mobileURL, platform);
   io.log(localized(context.locale, "\n✓ Quota Deck is ready", "\n✓ Quota Deck พร้อมใช้งานแล้ว"));
-  io.log(state.publicOrigin);
+  io.log(mobileURL);
+  io.log(localized(
+    context.locale,
+    "This URL includes a private access token. Treat it like a password inside your tailnet.",
+    "URL นี้มี access token ส่วนตัว ถือว่าเป็นรหัสผ่านภายใน tailnet ของคุณ",
+  ));
   if (copied) io.log(localized(context.locale, "URL copied to clipboard", "คัดลอก URL ไปยังคลิปบอร์ดแล้ว"));
-  if (io === console) qrCode.generate(state.publicOrigin, { small: true });
-  if (!options.noOpen) await (context.openTarget ?? openTarget)(state.publicOrigin, platform);
-  return { status: "installed", state };
+  if (io === console) qrCode.generate(mobileURL, { small: true });
+  if (!options.noOpen) await (context.openTarget ?? openTarget)(mobileURL, platform);
+  return { status: "installed", state, mobileURL };
 }
 
 async function ensurePrerequisites(report, options, context) {
@@ -358,10 +371,12 @@ async function writeServiceFiles(state, paths) {
 async function writeMacServiceFiles(state, paths) {
   const uid = currentUserID();
   const loader = `#!/bin/sh\nset -eu\nTOKEN_FILE=${sh(state.tokenFile)}\n[ -f "$TOKEN_FILE" ] && [ ! -L "$TOKEN_FILE" ] || exit 78\n[ "$(/usr/bin/stat -f '%u:%Lp' "$TOKEN_FILE")" = '${uid}:600' ] || exit 78\nIFS= read -r CODEXBAR_DASHBOARD_TOKEN < "$TOKEN_FILE"\nexport CODEXBAR_DASHBOARD_TOKEN\n`;
+  const accessLoader = `#!/bin/sh\nset -eu\nTOKEN_FILE=${sh(state.accessTokenFile)}\n[ -f "$TOKEN_FILE" ] && [ ! -L "$TOKEN_FILE" ] || exit 78\n[ "$(/usr/bin/stat -f '%u:%Lp' "$TOKEN_FILE")" = '${uid}:600' ] || exit 78\nIFS= read -r QUOTA_DECK_ACCESS_TOKEN < "$TOKEN_FILE"\nexport QUOTA_DECK_ACCESS_TOKEN\n`;
   const codexbar = `#!/bin/sh\nset -eu\numask 077\n. ${sh(path.join(paths.bin, "load-dashboard-token.sh"))}\nexec ${sh(state.codexBarExecutable)} ${state.codexBarArgs.map(sh).join(" ")}\n`;
   const instanceLine = state.instanceID ? `export QUOTA_DECK_INSTANCE_ID=${sh(state.instanceID)}\n` : "";
-  const gateway = `#!/bin/sh\nset -eu\numask 077\n. ${sh(path.join(paths.bin, "load-dashboard-token.sh"))}\nexport QUOTA_DECK_PORT=${sh(String(state.gatewayPort))}\nexport QUOTA_DECK_PUBLIC_ORIGIN=${sh(state.publicOrigin)}\nexport QUOTA_DECK_CODEXBAR_ORIGIN=${sh(`http://127.0.0.1:${state.codexBarPort}`)}\n${instanceLine}exec ${sh(state.nodeExecutable)} ${sh(path.join(state.runtimePath, "server.mjs"))}\n`;
+  const gateway = `#!/bin/sh\nset -eu\numask 077\n. ${sh(path.join(paths.bin, "load-dashboard-token.sh"))}\n. ${sh(path.join(paths.bin, "load-access-token.sh"))}\nexport QUOTA_DECK_PORT=${sh(String(state.gatewayPort))}\nexport QUOTA_DECK_PUBLIC_ORIGIN=${sh(state.publicOrigin)}\nexport QUOTA_DECK_CODEXBAR_ORIGIN=${sh(`http://127.0.0.1:${state.codexBarPort}`)}\n${instanceLine}exec ${sh(state.nodeExecutable)} ${sh(path.join(state.runtimePath, "server.mjs"))}\n`;
   await writeExecutable(path.join(paths.bin, "load-dashboard-token.sh"), loader);
+  await writeExecutable(path.join(paths.bin, "load-access-token.sh"), accessLoader);
   await writeExecutable(path.join(paths.bin, "run-codexbar.sh"), codexbar);
   await writeExecutable(path.join(paths.bin, "run-gateway.sh"), gateway);
   await mkdir(paths.services, { recursive: true });
@@ -394,10 +409,37 @@ async function writeWindowsServiceFiles(state, paths) {
   const providerLine = state.codexBarProvider
     ? `$env:QUOTA_DECK_CODEXBAR_PROVIDER=${ps(state.codexBarProvider)}\n`
     : "";
+  // Owner-only secret check mirrors macOS token loading: refuse reparse points
+  // and files that other principals can read before exporting any key material.
+  const ownerOnlySecretFn = [
+    "function Test-QuotaDeckOwnerOnlySecret([string]$Path) {",
+    "  if (-not (Test-Path -LiteralPath $Path)) { return $false }",
+    "  $item = Get-Item -LiteralPath $Path -Force",
+    "  if ($item.PSIsContainer) { return $false }",
+    "  if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) { return $false }",
+    "  $acl = Get-Acl -LiteralPath $Path",
+    "  $current = [Security.Principal.WindowsIdentity]::GetCurrent()",
+    "  $ownerSid = $acl.GetOwner([type]'Security.Principal.SecurityIdentifier')",
+    "  if ($ownerSid -ne $current.User) { return $false }",
+    "  foreach ($rule in $acl.Access) {",
+    "    if ($rule.AccessControlType -ne 'Allow') { continue }",
+    "    if (-not ($rule.FileSystemRights -band [Security.AccessControl.FileSystemRights]::ReadData)) { continue }",
+    "    $sid = try { $rule.IdentityReference.Translate([type]'Security.Principal.SecurityIdentifier') } catch { $null }",
+    "    if ($null -eq $sid) { return $false }",
+    "    if ($sid -ne $current.User) { return $false }",
+    "  }",
+    "  return $true",
+    "}",
+    "",
+  ].join("\n");
   const zaiTokenLines = state.zaiTokenFile
     ? [
         `$zaiTokenFile=${ps(state.zaiTokenFile)}`,
         "if (Test-Path -LiteralPath $zaiTokenFile) {",
+        "  if (-not (Test-QuotaDeckOwnerOnlySecret $zaiTokenFile)) {",
+        "    Write-Error 'zai-api-key must be an owner-only regular file'",
+        "    exit 78",
+        "  }",
         "  $zaiToken = (Get-Content -Raw -LiteralPath $zaiTokenFile).Trim()",
         "  if ($zaiToken.Length -gt 0) {",
         "    $env:Z_AI_API_KEY=$zaiToken",
@@ -410,15 +452,31 @@ async function writeWindowsServiceFiles(state, paths) {
   const zaiProviderLines = state.zaiTokenFile
     ? [
         `$zaiTokenFile=${ps(state.zaiTokenFile)}`,
-        "if (Test-Path -LiteralPath $zaiTokenFile) {",
+        "if ((Test-Path -LiteralPath $zaiTokenFile) -and (Test-QuotaDeckOwnerOnlySecret $zaiTokenFile)) {",
         "  $env:QUOTA_DECK_CODEXBAR_PROVIDER='codex,zai'",
         "}",
         "",
       ].join("\n")
     : "";
+  const accessTokenLines = state.accessTokenFile
+    ? [
+        `$accessTokenFile=${ps(state.accessTokenFile)}`,
+        "if (-not (Test-QuotaDeckOwnerOnlySecret $accessTokenFile)) {",
+        "  Write-Error 'access-token must be an owner-only regular file'",
+        "  exit 78",
+        "}",
+        "$env:QUOTA_DECK_ACCESS_TOKEN = (Get-Content -Raw -LiteralPath $accessTokenFile).Trim()",
+        "if ($env:QUOTA_DECK_ACCESS_TOKEN.Length -ne 64) {",
+        "  Write-Error 'access-token is invalid'",
+        "  exit 78",
+        "}",
+        "",
+      ].join("\n")
+    : "";
   const instanceLine = state.instanceID ? `$env:QUOTA_DECK_INSTANCE_ID=${ps(state.instanceID)}\n` : "";
-  const gateway = `${pathLine}${providerLine}${zaiProviderLines}$env:QUOTA_DECK_PORT=${ps(String(state.gatewayPort))}\n$env:QUOTA_DECK_PUBLIC_ORIGIN=${ps(state.publicOrigin)}\n$env:QUOTA_DECK_CODEXBAR_ORIGIN=${ps(`http://127.0.0.1:${state.codexBarPort}`)}\n${instanceLine}& ${ps(state.nodeExecutable)} ${ps(path.join(state.runtimePath, "server.mjs"))}\nexit $LASTEXITCODE\n`;
-  await writeFile(path.join(paths.bin, "run-codexbar.ps1"), `${pathLine}${providerLine}${zaiTokenLines}& ${ps(state.codexBarExecutable)} ${state.codexBarArgs.map(ps).join(" ")}\nexit $LASTEXITCODE\n`);
+  const codexbarBody = `${pathLine}${ownerOnlySecretFn}${providerLine}${zaiTokenLines}& ${ps(state.codexBarExecutable)} ${state.codexBarArgs.map(ps).join(" ")}\nexit $LASTEXITCODE\n`;
+  const gateway = `${pathLine}${ownerOnlySecretFn}${providerLine}${zaiProviderLines}${accessTokenLines}$env:QUOTA_DECK_PORT=${ps(String(state.gatewayPort))}\n$env:QUOTA_DECK_PUBLIC_ORIGIN=${ps(state.publicOrigin)}\n$env:QUOTA_DECK_CODEXBAR_ORIGIN=${ps(`http://127.0.0.1:${state.codexBarPort}`)}\n${instanceLine}& ${ps(state.nodeExecutable)} ${ps(path.join(state.runtimePath, "server.mjs"))}\nexit $LASTEXITCODE\n`;
+  await writeFile(path.join(paths.bin, "run-codexbar.ps1"), codexbarBody);
   await writeFile(path.join(paths.bin, "run-gateway.ps1"), gateway);
 }
 
@@ -499,13 +557,13 @@ async function stopPreviousWindowsProcesses(state, { run }) {
   await run(shell, ["-NoProfile", "-NonInteractive", "-Command", script]);
 }
 
-async function waitForURL(url, timeoutMs, fetchImpl = globalThis.fetch, validate = null) {
+async function waitForURL(url, timeoutMs, fetchImpl = globalThis.fetch, validate = null, extraHeaders = {}) {
   const deadline = Date.now() + timeoutMs;
   let lastStatus = null;
   while (Date.now() < deadline) {
     try {
       const response = await fetchImpl(url, {
-        headers: { Host: new URL(url).host },
+        headers: { Host: new URL(url).host, ...extraHeaders },
         signal: AbortSignal.timeout(5_000),
       });
       lastStatus = response.status;
@@ -553,6 +611,16 @@ async function readState(file) {
     return parsed?.schemaVersion === 1 ? parsed : null;
   } catch (error) {
     if (error?.code === "ENOENT" || error instanceof SyntaxError) return null;
+    throw error;
+  }
+}
+
+async function readSecretFile(file) {
+  try {
+    const value = (await readFile(file, "utf8")).trim();
+    return /^[a-f0-9]{64}$/iu.test(value) ? value.toLowerCase() : null;
+  } catch (error) {
+    if (error?.code === "ENOENT") return null;
     throw error;
   }
 }

@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -49,6 +50,7 @@ const SECURITY_HEADERS = {
  *   publicDir?: string,
  *   allowedHosts?: string[],
  *   publicOrigin?: string | null,
+ *   accessToken?: string | null,
  *   instanceID?: string | null,
  * }} options
  */
@@ -58,6 +60,7 @@ export function createQuotaDeckServer({
   publicDir = DEFAULT_PUBLIC_DIR,
   allowedHosts = ["127.0.0.1", "localhost"],
   publicOrigin = null,
+  accessToken = null,
   instanceID = null,
 }) {
   if (!codexBarClient || typeof codexBarClient.getSnapshot !== "function") {
@@ -70,6 +73,7 @@ export function createQuotaDeckServer({
     trustedOrigins.add(normalizeOrigin(publicOrigin));
   }
   const trustedInstanceID = /^[a-f0-9]{32}$/u.test(String(instanceID ?? "")) ? String(instanceID) : null;
+  const requiredAccessToken = normalizeAccessToken(accessToken);
 
   const server = http.createServer(
     {
@@ -83,6 +87,7 @@ export function createQuotaDeckServer({
         publicDir,
         trustedHosts,
         trustedOrigins,
+        accessToken: requiredAccessToken,
         instanceID: trustedInstanceID,
       }).catch((error) => {
         logger.error?.("Quota Deck request failed", {
@@ -148,6 +153,11 @@ async function handleRequest(request, response, context) {
       sendJSON(response, 404, { error: "not_found" }, method === "HEAD");
       return;
     }
+    if (context.accessToken && !requestHasAccessToken(request, context.accessToken)) {
+      response.setHeader("WWW-Authenticate", 'Bearer realm="Quota Deck", charset="UTF-8"');
+      sendJSON(response, 401, { error: "unauthorized" }, method === "HEAD");
+      return;
+    }
 
     const snapshot = await context.codexBarClient.getSnapshot();
     sendJSON(response, 200, snapshot, method === "HEAD");
@@ -160,7 +170,8 @@ async function handleRequest(request, response, context) {
     return;
   }
 
-  const asset = url.search === "" ? STATIC_ASSETS.get(url.pathname) : null;
+  // Shell may carry a one-time ?t= bootstrap query; other assets stay exact-path.
+  const asset = shellSearchAllowed(url) ? STATIC_ASSETS.get(url.pathname) : null;
   if (!asset) {
     sendJSON(response, 404, { error: "not_found" }, method === "HEAD");
     return;
@@ -265,4 +276,36 @@ function normalizeHostname(value) {
     throw new TypeError("Allowed host is invalid");
   }
   return normalized;
+}
+
+function normalizeAccessToken(value) {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "string") throw new TypeError("Access token must be a string");
+  const trimmed = value.trim().toLowerCase();
+  if (!/^[a-f0-9]{64}$/u.test(trimmed)) {
+    throw new TypeError("Access token must be a 64-character hex string");
+  }
+  return trimmed;
+}
+
+function shellSearchAllowed(url) {
+  if (url.search === "") return true;
+  if (url.pathname !== "/" && url.pathname !== "/index.html") return false;
+  const keys = [...url.searchParams.keys()];
+  if (keys.length !== 1 || keys[0] !== "t") return false;
+  return /^[a-f0-9]{64}$/iu.test(url.searchParams.get("t") ?? "");
+}
+
+function requestHasAccessToken(request, expectedToken) {
+  const authorization = request.headers.authorization;
+  if (typeof authorization !== "string") return false;
+  const match = authorization.match(/^Bearer\s+(\S+)\s*$/iu);
+  if (!match) return false;
+  return secureTokenEquals(match[1], expectedToken);
+}
+
+function secureTokenEquals(provided, expected) {
+  const left = createHash("sha256").update(String(provided)).digest();
+  const right = createHash("sha256").update(String(expected)).digest();
+  return timingSafeEqual(left, right);
 }

@@ -125,6 +125,39 @@ test("rejects writes and unknown API routes without calling CodexBar", async (t)
   assert.equal(calls, 0);
 });
 
+test("requires a bearer access token for /api/snapshot when configured", async (t) => {
+  const accessToken = "b".repeat(64);
+  let calls = 0;
+  const server = createQuotaDeckServer({
+    codexBarClient: {
+      getSnapshot: async () => {
+        calls += 1;
+        return snapshot;
+      },
+    },
+    accessToken,
+  });
+  await listen(server);
+  t.after(() => close(server));
+  const origin = serverOrigin(server);
+
+  const missing = await fetch(`${origin}/api/snapshot`);
+  const wrong = await fetch(`${origin}/api/snapshot`, {
+    headers: { Authorization: `Bearer ${"c".repeat(64)}` },
+  });
+  const ok = await fetch(`${origin}/api/snapshot`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const shell = await fetch(`${origin}/?t=${accessToken}`);
+
+  assert.equal(missing.status, 401);
+  assert.equal(wrong.status, 401);
+  assert.equal(ok.status, 200);
+  assert.deepEqual(await ok.json(), snapshot);
+  assert.equal(shell.status, 200);
+  assert.equal(calls, 1);
+});
+
 test("rejects untrusted Host and cross-site browser requests", async (t) => {
   let calls = 0;
   const server = createQuotaDeckServer({

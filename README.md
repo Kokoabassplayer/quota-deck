@@ -11,10 +11,13 @@ Agent context: [llms.txt](https://kokoabassplayer.github.io/quota-deck/llms.txt)
 Install [Node.js 22 or newer](https://nodejs.org/), then run:
 
 ```bash
-npx quota-deck@latest setup
+# Prefer pinning a release after reviewing the tag on GitHub
+npx quota-deck@0.1.0 setup
 ```
 
-The wizard checks your computer, asks before installing missing software, opens the login screens, installs a private background runtime, configures an unused Tailscale Serve HTTPS listener (falling back to `:8443`/`:10000` on Windows when `:443` already serves another homelab app), and shows a mobile URL with a locally generated QR code.
+`@latest` also works, but pinning avoids surprise upgrades when setup installs background services.
+
+The wizard checks your computer, asks before installing missing software, opens the login screens, installs a private background runtime, configures an unused Tailscale Serve HTTPS listener (falling back to `:8443`/`:10000` on Windows when `:443` already serves another homelab app), and shows a mobile URL (with a private access token) as a locally generated QR code.
 
 - macOS: stable setup using CodexBar and LaunchAgents; it uses the authenticated local dashboard endpoint when available and a bounded legacy fallback otherwise.
 - Windows 10/11: supported setup path validated end-to-end on the Windows homelab, using Win-CodexBar legacy `serve` endpoints and limited-user Scheduled Tasks. Broader Windows hardware/build coverage remains beta.
@@ -22,7 +25,7 @@ The wizard checks your computer, asks before installing missing software, opens 
 
 No repository clone, configuration file, service command, hostname lookup, Docker, or administrator-level Quota Deck service is required for the Codex-only path. Authentication still needs your interaction because provider and Tailscale login cannot be automated safely.
 
-On Windows, z.ai is optional. To add it, place the API key in the owner-only file `%LOCALAPPDATA%\QuotaDeck\zai-api-key` and run `setup` again. Quota Deck loads that file only into the local CodexBar process, keeps the gateway and browser key-free, and never writes the key to `install.json`, logs, the QR code, or `/api/snapshot`.
+On Windows, z.ai is optional. To add it, place the API key in the owner-only file `%LOCALAPPDATA%\QuotaDeck\zai-api-key` and run `setup` again. Quota Deck loads that file only into the local CodexBar process when the file is a regular owner-only file (not world-readable), keeps the gateway and browser key-free, and never writes the key to `install.json`, logs, the QR code, or `/api/snapshot`.
 
 ## Commands
 
@@ -63,18 +66,20 @@ Quota Deck gateway (loopback)
    CodexBar serve (loopback)
 ```
 
-The phone receives only normalized quota, reset, freshness, and optional usage-summary fields. Provider credentials remain on the computer. The browser API is `GET /api/snapshot` schema v1 and is never cached by the service worker.
+The phone receives only normalized quota, reset, freshness, and optional usage-summary fields. Provider credentials remain on the computer. The browser API is `GET /api/snapshot` schema v1 (Bearer access token required) and is never cached by the service worker.
 
-The computer must be awake, logged in, and connected to Tailscale. Access is governed by your tailnet policy. Quota Deck never enables Tailscale Funnel or opens a public router port.
+The computer must be awake, logged in, and connected to Tailscale. Access is governed by your tailnet ACL **and** a local gateway access token in the mobile URL. Quota Deck never enables Tailscale Funnel or opens a public router port. Prefer ACLs that allow only your own devices.
 
 ## Privacy and security
 
 - Both local services bind to loopback.
+- Setup generates a 256-bit gateway access token; the mobile QR/URL includes it once (`?t=`), the PWA stores it in session storage, and `/api/snapshot` requires `Authorization: Bearer`.
 - macOS uses a generated 256-bit CodexBar dashboard token stored outside the package with owner-only permissions.
-- The token is not placed in a plist, command argument, browser response, QR service, or log.
+- Tokens are not placed in a plist, command argument, browser response body, third-party QR service, or log.
 - The QR code is rendered locally in the terminal; the private URL is not sent to a third party.
 - `QUOTA_DECK_CODEXBAR_ORIGIN` accepts only strict `http://127.0.0.1:<port>` values.
 - Setup refuses to replace an unknown local port or any existing Tailscale Serve configuration.
+- Windows optional `zai-api-key` is refused unless the file is owner-only.
 - `doctor --json` reports capability state without executable paths, credentials, account identities, or provider payloads.
 - The npm package has no `postinstall` script and uses an explicit file allowlist.
 

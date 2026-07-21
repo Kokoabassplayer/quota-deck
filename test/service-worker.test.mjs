@@ -14,7 +14,7 @@ test("installs a new shell generation and removes the previous cache", async () 
   await harness.dispatchLifecycle("install");
   await harness.dispatchLifecycle("activate");
 
-  assert.deepEqual(await harness.caches.keys(), ["quota-deck-shell-v10"]);
+  assert.deepEqual(await harness.caches.keys(), ["quota-deck-shell-v11"]);
 });
 
 test("serves a fresh same-origin shell asset and refreshes its cached fallback", async () => {
@@ -25,7 +25,7 @@ test("serves a fresh same-origin shell asset and refreshes its cached fallback",
       return new Response("new app");
     },
   });
-  const cache = await harness.caches.open("quota-deck-shell-v10");
+  const cache = await harness.caches.open("quota-deck-shell-v11");
   await cache.put("/app.mjs", new Response("old app"));
 
   const response = await harness.dispatchFetch("/app.mjs");
@@ -41,7 +41,7 @@ test("refreshes the cached root document after an online app navigation", async 
       headers: { "content-type": "text/html" },
     }),
   });
-  const cache = await harness.caches.open("quota-deck-shell-v10");
+  const cache = await harness.caches.open("quota-deck-shell-v11");
   await cache.put("/", new Response("old document"));
 
   const response = await harness.dispatchFetch("/", { mode: "navigate" });
@@ -66,7 +66,7 @@ test("falls back to the cached shell offline but always routes API reads to the 
   const offlineHarness = await createWorkerHarness({
     fetchImpl: async () => { throw new TypeError("offline"); },
   });
-  const offlineCache = await offlineHarness.caches.open("quota-deck-shell-v10");
+  const offlineCache = await offlineHarness.caches.open("quota-deck-shell-v11");
   await offlineCache.put("/styles.css", new Response("cached styles"));
 
   const shellResponse = await offlineHarness.dispatchFetch("/styles.css");

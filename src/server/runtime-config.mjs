@@ -10,6 +10,7 @@ const DEFAULT_CODEXBAR_ORIGIN = `http://127.0.0.1:${CODEXBAR_PORT}`;
 export function loadRuntimeConfig(env) {
   const publicOrigin = parsePublicOrigin(env.QUOTA_DECK_PUBLIC_ORIGIN);
   const dashboardToken = parseDashboardToken(env.CODEXBAR_DASHBOARD_TOKEN);
+  const accessToken = parseAccessToken(env.QUOTA_DECK_ACCESS_TOKEN);
   const codexBarOrigin = parseCodexBarOrigin(env.QUOTA_DECK_CODEXBAR_ORIGIN);
   const port = parsePort(env.QUOTA_DECK_PORT, Number(new URL(codexBarOrigin).port));
   const allowedHosts = ["127.0.0.1", "localhost"];
@@ -21,6 +22,7 @@ export function loadRuntimeConfig(env) {
     allowedHosts,
     publicOrigin,
     dashboardToken,
+    accessToken,
     codexBarOrigin,
   };
 }
@@ -69,6 +71,20 @@ function parseDashboardToken(value) {
     throw new TypeError("CODEXBAR_DASHBOARD_TOKEN is invalid");
   }
   return trimmed;
+}
+
+/**
+ * Optional mobile/API bearer. When set, /api/* requires Authorization: Bearer.
+ * Setup always generates a 256-bit hex token so multi-user tailnets are not open.
+ */
+function parseAccessToken(value) {
+  if (value === undefined || value === "") return null;
+  if (typeof value !== "string") throw new TypeError("QUOTA_DECK_ACCESS_TOKEN must be a string");
+  const trimmed = value.trim();
+  if (!/^[a-f0-9]{64}$/iu.test(trimmed)) {
+    throw new TypeError("QUOTA_DECK_ACCESS_TOKEN must be a 64-character hex string");
+  }
+  return trimmed.toLowerCase();
 }
 
 function parseCodexBarOrigin(value) {
