@@ -3,6 +3,8 @@ import test from "node:test";
 
 import { loadRuntimeConfig } from "../src/server/runtime-config.mjs";
 
+const SAMPLE_ACCESS_TOKEN = "a".repeat(64);
+
 test("defaults to a loopback-only gateway", () => {
   assert.deepEqual(loadRuntimeConfig({}), {
     host: "127.0.0.1",
@@ -10,6 +12,7 @@ test("defaults to a loopback-only gateway", () => {
     allowedHosts: ["127.0.0.1", "localhost"],
     publicOrigin: null,
     dashboardToken: undefined,
+    accessToken: null,
     codexBarOrigin: "http://127.0.0.1:8080",
   });
 });
@@ -20,6 +23,7 @@ test("accepts one exact Tailscale Serve HTTPS origin", () => {
       QUOTA_DECK_PORT: "9443",
       QUOTA_DECK_PUBLIC_ORIGIN: "https://quota-deck.example-tailnet.ts.net",
       CODEXBAR_DASHBOARD_TOKEN: "secret-token",
+      QUOTA_DECK_ACCESS_TOKEN: SAMPLE_ACCESS_TOKEN,
     }),
     {
       host: "127.0.0.1",
@@ -27,6 +31,7 @@ test("accepts one exact Tailscale Serve HTTPS origin", () => {
       allowedHosts: ["127.0.0.1", "localhost", "quota-deck.example-tailnet.ts.net"],
       publicOrigin: "https://quota-deck.example-tailnet.ts.net",
       dashboardToken: "secret-token",
+      accessToken: SAMPLE_ACCESS_TOKEN,
       codexBarOrigin: "http://127.0.0.1:8080",
     },
   );
@@ -67,6 +72,8 @@ test("rejects public, ambiguous, or conflicting gateway configuration", () => {
     { QUOTA_DECK_PUBLIC_ORIGIN: "https://user@quota.example.ts.net" },
     { QUOTA_DECK_PUBLIC_ORIGIN: "https://quota.example.ts.net/path" },
     { CODEXBAR_DASHBOARD_TOKEN: "bad\ntoken" },
+    { QUOTA_DECK_ACCESS_TOKEN: "too-short" },
+    { QUOTA_DECK_ACCESS_TOKEN: "g".repeat(64) },
     { QUOTA_DECK_CODEXBAR_ORIGIN: "https://127.0.0.1:8080" },
     { QUOTA_DECK_CODEXBAR_ORIGIN: "http://localhost:8080" },
     { QUOTA_DECK_CODEXBAR_ORIGIN: "http://0.0.0.0:8080" },

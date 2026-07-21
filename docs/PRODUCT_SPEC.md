@@ -34,10 +34,12 @@ The gateway keeps the last successful in-memory snapshot. Requests can receive i
 - No public internet route and no Tailscale Funnel.
 - Local services bind to loopback; the upstream override is loopback-only.
 - Secrets remain server-side and outside the npm package.
+- Gateway access token gates `/api/snapshot` via `Authorization: Bearer` in addition to Tailscale ACL.
 - Upstream paths and methods are allowlisted; request time, response size, and content type are bounded.
 - API responses use `Cache-Control: no-store`; the service worker bypasses `/api/`.
 - Upstream values render as text, never HTML.
 - Unknown ports and Tailscale Serve routes fail closed.
+- Optional Windows secret files are loaded only when owner-only ACL checks pass.
 - Diagnostics exclude credentials, executable paths, provider payloads, and account identity.
 
 ## Acceptance criteria

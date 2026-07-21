@@ -343,6 +343,14 @@ test("installs, upgrades, and uninstalls atomically without touching unrelated s
   assert.equal(first.status, "installed");
   assert.equal(routeOwned, true);
   assert.equal(first.state.publicOrigin, "https://test-machine.test-tailnet.ts.net");
+  assert.match(first.mobileURL, /^https:\/\/test-machine\.test-tailnet\.ts\.net\/\?t=[a-f0-9]{64}$/u);
+  const paths = installationPaths({ platform: "darwin", home });
+  await access(paths.accessToken);
+  const accessToken = (await readFile(paths.accessToken, "utf8")).trim();
+  assert.match(accessToken, /^[a-f0-9]{64}$/u);
+  assert.equal(first.mobileURL, `https://test-machine.test-tailnet.ts.net/?t=${accessToken}`);
+  const gatewayScript = await readFile(path.join(paths.bin, "run-gateway.sh"), "utf8");
+  assert.match(gatewayScript, /load-access-token\.sh/u);
   assert.equal(JSON.parse(await readFile(path.join(home, "Library", "Application Support", "QuotaDeck", "install.json"), "utf8")).version, "0.1.0-test");
 
   await assert.rejects(
@@ -373,6 +381,7 @@ test("installs, upgrades, and uninstalls atomically without touching unrelated s
   const second = await setupQuotaDeck(options, context);
   assert.equal(second.status, "installed");
   assert.notEqual(second.state.runtimePath, first.state.runtimePath);
+  assert.equal(second.mobileURL, first.mobileURL);
   await assert.rejects(() => access(first.state.runtimePath));
 
   const removed = await uninstallQuotaDeck({ ...options, command: "uninstall" }, context);
@@ -438,11 +447,16 @@ test("runs the Windows Scheduled Task lifecycle with native paths", {
   const gatewayScript = await readFile(path.join(paths.bin, "run-gateway.ps1"), "utf8");
   const codexbarScript = await readFile(path.join(paths.bin, "run-codexbar.ps1"), "utf8");
   assert.match(gatewayScript, /QUOTA_DECK_CODEXBAR_ORIGIN/u);
+  assert.match(gatewayScript, /QUOTA_DECK_ACCESS_TOKEN/u);
+  assert.match(gatewayScript, /Test-QuotaDeckOwnerOnlySecret/u);
   assert.match(gatewayScript, /zai-api-key/u);
   assert.match(gatewayScript, /codex,zai/u);
   assert.match(codexbarScript, /Z_AI_API_KEY/u);
   assert.match(codexbarScript, /zai-api-key/u);
+  assert.match(codexbarScript, /Test-QuotaDeckOwnerOnlySecret/u);
   assert.match(gatewayScript, /App Data/u);
+  assert.match(installed.mobileURL, /^https:\/\/windows-beta\.example\.ts\.net\/\?t=[a-f0-9]{64}$/u);
+  await access(paths.accessToken);
   const taskCreates = calls.filter(({ command, args }) => command === "schtasks.exe" && args[0] === "/Create");
   assert.equal(taskCreates.length, 2);
   assert(taskCreates.every(({ args }) => args.includes("LIMITED") && args.includes("ONLOGON")));

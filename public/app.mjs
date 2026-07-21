@@ -8,9 +8,11 @@ import {
 } from "./i18n.mjs";
 
 const OVERVIEW_PROVIDER_ID = "overview";
+const ACCESS_TOKEN_STORAGE_KEY = "quota-deck-access-token";
 const LOCALE = detectBrowserLocale();
 const TIME_ZONE = browserTimeZone();
 applyStaticLocale(document, LOCALE);
+const ACCESS_TOKEN = resolveAccessToken();
 
 const elements = {
   announcer: byID("sync-announcer"),
@@ -72,11 +74,17 @@ async function sync({ announce }) {
   setSyncing(true);
 
   try {
+    const headers = { Accept: "application/json" };
+    if (ACCESS_TOKEN) headers.Authorization = `Bearer ${ACCESS_TOKEN}`;
     const response = await fetch("/api/snapshot", {
       cache: "no-store",
-      headers: { Accept: "application/json" },
+      headers,
       signal: AbortSignal.timeout(15_000),
     });
+    if (response.status === 401) {
+      clearStoredAccessToken();
+      throw new Error("Snapshot request unauthorized");
+    }
     if (!response.ok) throw new Error(`Snapshot request failed (${response.status})`);
     const snapshot = await response.json();
     appState.snapshot = snapshot;
@@ -635,6 +643,42 @@ function setupPWAInstall() {
       // The browser may cancel an install prompt; the dashboard remains usable.
     }
   });
+}
+
+/**
+ * Bootstrap the mobile access token from ?t= once, then keep it in sessionStorage
+ * so later API calls use Authorization instead of leaving the secret in the URL bar.
+ */
+function resolveAccessToken() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get("t");
+    if (fromQuery && /^[a-f0-9]{64}$/iu.test(fromQuery)) {
+      const token = fromQuery.toLowerCase();
+      try {
+        window.sessionStorage?.setItem(ACCESS_TOKEN_STORAGE_KEY, token);
+      } catch {
+        // Private mode may reject storage; the in-memory token still works for this tab.
+      }
+      params.delete("t");
+      const clean = `${window.location.pathname}${params.toString() ? `?${params}` : ""}${window.location.hash}`;
+      window.history.replaceState({}, "", clean);
+      return token;
+    }
+    const stored = window.sessionStorage?.getItem(ACCESS_TOKEN_STORAGE_KEY);
+    if (stored && /^[a-f0-9]{64}$/iu.test(stored)) return stored.toLowerCase();
+  } catch {
+    // Storage or history may be unavailable; continue without a token.
+  }
+  return null;
+}
+
+function clearStoredAccessToken() {
+  try {
+    window.sessionStorage?.removeItem(ACCESS_TOKEN_STORAGE_KEY);
+  } catch {
+    // Ignore storage failures while clearing a rejected token.
+  }
 }
 
 function byID(id) {
