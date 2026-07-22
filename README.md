@@ -65,7 +65,7 @@ Quota Deck gateway (loopback)
 
 The phone receives only normalized quota, reset, freshness, and optional usage-summary fields. Provider credentials remain on the computer. The browser API is `GET /api/snapshot` schema v1 and is never cached by the service worker.
 
-The computer must be awake, logged in, and connected to Tailscale. Access is governed by your tailnet policy. Quota Deck never enables Tailscale Funnel or opens a public router port.
+The computer must be connected to Tailscale. On Windows, setup also disables AC sleep/hibernate, enables Tailscale unattended mode, and registers the services for both boot and logon so the homelab can recover after a restart. CodexBar itself remains user-scoped and may still need the Windows user session for provider authentication; this does not enable auto-login. Access is governed by your tailnet policy. Quota Deck never enables Tailscale Funnel or opens a public router port.
 
 ## Privacy and security
 

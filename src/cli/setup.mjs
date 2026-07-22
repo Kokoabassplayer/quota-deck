@@ -449,8 +449,19 @@ async function registerServices(state, paths, { run }) {
     if (created.code !== 0) throw setupError(`Could not register ${WINDOWS_TASKS[index]}`, 69);
   }
   const reliabilityScript = [
+    "$ProgressPreference = 'SilentlyContinue'",
     `$names = @(${WINDOWS_TASKS.map(ps).join(", ")})`,
+    "$namespace = 'http://schemas.microsoft.com/windows/2004/02/mit/task'",
     "foreach ($name in $names) {",
+    "  [xml]$taskXML = Export-ScheduledTask -TaskName $name",
+    "  if (-not $taskXML.Task.Triggers.BootTrigger) {",
+    "    $boot = $taskXML.CreateElement('BootTrigger', $namespace)",
+    "    $enabled = $taskXML.CreateElement('Enabled', $namespace)",
+    "    $enabled.InnerText = 'true'",
+    "    [void]$boot.AppendChild($enabled)",
+    "    [void]$taskXML.Task.Triggers.AppendChild($boot)",
+    "    Register-ScheduledTask -TaskName $name -Xml $taskXML.OuterXml -Force | Out-Null",
+    "  }",
     "  $task = Get-ScheduledTask -TaskName $name -ErrorAction Stop",
     "  $settings = $task.Settings",
     "  $settings.DisallowStartIfOnBatteries = $false",
@@ -467,6 +478,16 @@ async function registerServices(state, paths, { run }) {
     "-NoProfile", "-NonInteractive", "-Command", reliabilityScript,
   ]);
   if (shellSettings.code !== 0) throw setupError("Could not apply Windows task reliability settings", 69);
+  const unattended = await run(state.tailscaleExecutable, ["set", "--unattended=true"]);
+  if (unattended.code !== 0) throw setupError("Could not enable Tailscale unattended mode", 69);
+  for (const powerArgs of [
+    ["/change", "standby-timeout-ac", "0"],
+    ["/change", "hibernate-timeout-ac", "0"],
+    ["/S", "SCHEME_CURRENT"],
+  ]) {
+    const power = await run("powercfg.exe", powerArgs);
+    if (power.code !== 0) throw setupError("Could not apply Windows AC power reliability settings", 69);
+  }
   for (const task of WINDOWS_TASKS) await run("schtasks.exe", ["/Run", "/TN", task]);
 }
 

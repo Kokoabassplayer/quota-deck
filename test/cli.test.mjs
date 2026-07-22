@@ -446,6 +446,10 @@ test("runs the Windows Scheduled Task lifecycle with native paths", {
   const taskCreates = calls.filter(({ command, args }) => command === "schtasks.exe" && args[0] === "/Create");
   assert.equal(taskCreates.length, 2);
   assert(taskCreates.every(({ args }) => args.includes("LIMITED") && args.includes("ONLOGON")));
+  assert(calls.some(({ command, args }) => command.endsWith("powershell.exe") && args.join(" ").includes("BootTrigger")));
+  assert(calls.some(({ command, args }) => command === "powercfg.exe" && args.join(" ").includes("standby-timeout-ac 0")));
+  assert(calls.some(({ command, args }) => command === "powercfg.exe" && args.join(" ").includes("hibernate-timeout-ac 0")));
+  assert(calls.some(({ command, args }) => command.endsWith("tailscale.exe") && args.join(" ").includes("set --unattended=true")));
 
   const removed = await uninstallQuotaDeck({ ...setupOptions(), command: "uninstall" }, context);
   assert.equal(removed.status, "uninstalled");
